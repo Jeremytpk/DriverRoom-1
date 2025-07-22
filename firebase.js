@@ -1,10 +1,10 @@
 import { initializeApp } from 'firebase/app';
-// Import initializeAuth and getReactNativePersistence
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+// Jey: For web, you only need getAuth. Persistence is handled automatically.
+import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-// Import AsyncStorage
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+// Jey: No need to import ReactNativeAsyncStorage for web builds
+// import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCeFMr6BVp9hvJ8dqACXJXH4IrDuPqsZgg",
@@ -18,11 +18,9 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Explicitly initialize Auth with React Native persistence
-// This is the key change for robust session persistence
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
+// Jey: Simplify Auth initialization for web.
+// Firebase Auth automatically uses browser persistence (localStorage/sessionStorage) by default.
+const auth = getAuth(app);
 
 const db = getFirestore(app);
 const storage = getStorage(app);
