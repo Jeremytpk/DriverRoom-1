@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "514583100779",
+    "project_id": "driverroom-1",
+    "storage_bucket": "driverroom-1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:514583100779:android:dabc0ee46ddf157790e02e",
+        "android_client_info": {
+          "package_name": "com.company.driverroom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNnG9a1Cu2XAfioUuccZ4d4WBSwbfF1vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:514583100779:android:4af590152b4e4e9490e02e",
+        "android_client_info": {
+          "package_name": "com.jeremytpk.DriverRoom"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNnG9a1Cu2XAfioUuccZ4d4WBSwbfF1vo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
