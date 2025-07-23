@@ -583,7 +583,9 @@ const HomeWrapper = () => {
       <Stack.Screen
         name="OneConversation"
         component={OneConversation}
-        options={({ route }) => ({ title: route.params.userName })}
+        options={{
+          headerShown: false,
+        }}
       />
     </Stack.Navigator>
   );

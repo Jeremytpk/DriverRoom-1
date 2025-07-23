@@ -18,9 +18,15 @@ import {
   Dimensions,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import ImagePicker from 'expo-image-picker';
 import { db, storage } from '../../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  doc, 
+  setDoc, 
+  serverTimestamp 
+} from 'firebase/firestore'; 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../context/AuthContext';
 
@@ -153,7 +159,9 @@ const Signup = ({ navigation }) => {
       // Jey: Conditionally pass companyName or location based on role
       const companyInfo = role === 'driver' ? selectedCompany.name : location;
 
-      await register(
+      // Register the user (this will create an entry in the 'users' collection or similar,
+      // handled by your AuthContext's `register` function)
+      const userCredential = await register(
         email,
         password,
         name.trim(),
@@ -161,6 +169,28 @@ const Signup = ({ navigation }) => {
         role,
         imageUrl
       );
+
+      // Jey: If the user is a dispatcher_company, create an entry in the 'dsps' collection
+      if (role === 'dispatcher_company') {
+        const dspData = {
+          userId: userCredential.user.uid, // Get the UID from the newly registered user
+          dspName: name.trim(), // The Dispatcher/Company Name entered
+          location: location.trim(),
+          email: email.trim(),
+          profileImageUrl: imageUrl,
+          createdAt: serverTimestamp(),
+          // You might want to add other fields here, like status, active drivers, etc.
+        };
+
+        // Create a new document in the 'dsps' collection.
+        // You can either let Firestore auto-generate an ID (addDoc)
+        // or use the user's UID as the document ID (setDoc with doc()).
+        // Using the UID as the document ID for DSPs is often a good practice
+        // as it provides a direct link back to the user's authentication record.
+        await setDoc(doc(db, 'dsps', userCredential.user.uid), dspData);
+        console.log("Jey: Dispatcher/Company entry created in 'dsps' collection.");
+      }
+
 
       Alert.alert(
         'Success',

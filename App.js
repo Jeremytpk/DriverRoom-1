@@ -250,7 +250,8 @@ export default function App() {
             options={{ headerShown: false, title: '' , headerTitleAlign: 'center'}}
             />
             <Stack.Screen name="OneConversation"
-            component={OneConversation} options={{ headerShown: true }}
+            component={OneConversation} 
+            options={{ headerShown: false }}
             />
           </Stack.Navigator>
         </NavigationContainer>

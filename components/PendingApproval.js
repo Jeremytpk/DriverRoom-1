@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
 const PendingApproval = () => {
-  // Jey: Corrected to use updateUserProfile from context
   const { userData, updateUserProfile, currentUser } = useAuth();
   const [checkingStatus, setCheckingStatus] = useState(false);
   const navigation = useNavigation();
@@ -19,14 +18,13 @@ const PendingApproval = () => {
 
     setCheckingStatus(true);
     try {
-      // Jey: Call updateUserProfile to re-fetch the user's profile from Firestore
       const updatedData = await updateUserProfile(currentUser);
 
       if (updatedData?.activated) {
         console.log("Jey: Account activated! Redirecting user to their respective home page.");
         if (updatedData.role === 'driver') {
           navigation.replace('MainApp', { screen: 'HomeTab' });
-        } else if (updatedData.role === 'company') {
+        } else if (updatedData.role === 'company' || updatedData.role === 'dispatcher_company') {
           navigation.replace('MainApp', { screen: 'CompanyTab' });
         } else if (updatedData.role === 'admin') {
           navigation.replace('MainApp', { screen: 'AdminTab' });
@@ -42,12 +40,15 @@ const PendingApproval = () => {
     }
   };
 
+  // Jey: Removed the initial call to checkApprovalStatus from useEffect.
+  // The status will now only be checked when the button is pressed.
   useEffect(() => {
-    checkApprovalStatus();
-
-    const interval = setInterval(checkApprovalStatus, 30000);
-    return () => clearInterval(interval);
-  }, [currentUser, updateUserProfile]); // Dependency updated to updateUserProfile
+    // This useEffect hook is now only here to observe currentUser and updateUserProfile
+    // but no longer triggers an automatic status check.
+    // If you need any setup that depends on currentUser *without* triggering a check,
+    // it would go here. Otherwise, you could potentially remove this useEffect entirely
+    // if its only purpose was the initial check.
+  }, [currentUser, updateUserProfile]);
 
   return (
     <View style={styles.container}>
@@ -55,7 +56,7 @@ const PendingApproval = () => {
       <Text style={styles.title}>Account Pending Approval</Text>
       <Text style={styles.message}>
         Your account is waiting for approval from your DSP/ Company.
-        You'll be redirected once your account is activated.
+        Please tap the button below to check your status.
       </Text>
 
       <TouchableOpacity
@@ -69,10 +70,6 @@ const PendingApproval = () => {
           <Text style={styles.buttonText}>Check Approval Status</Text>
         )}
       </TouchableOpacity>
-
-      <Text style={styles.note}>
-        We'll automatically check your status every 30 seconds
-      </Text>
     </View>
   );
 };
@@ -117,7 +114,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  note: {
+  note: { // Although this style is defined, the <Text> component using it has been removed.
     color: '#999',
     fontSize: 12,
     textAlign: 'center',
