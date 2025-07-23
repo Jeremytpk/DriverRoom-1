@@ -5,7 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
+  Alert, // Make sure Alert is imported, which it is
   ScrollView,
   Modal,
   TouchableWithoutFeedback,
@@ -23,10 +23,10 @@ import { db, storage } from '../../firebase';
 import {
   collection,
   getDocs,
-  doc, 
-  setDoc, 
-  serverTimestamp 
-} from 'firebase/firestore'; 
+  doc,
+  setDoc,
+  serverTimestamp
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../context/AuthContext';
 
@@ -191,13 +191,18 @@ const Signup = ({ navigation }) => {
         console.log("Jey: Dispatcher/Company entry created in 'dsps' collection.");
       }
 
-
+      // Jey: Display success message and navigate
       Alert.alert(
         'Success',
         role === 'driver'
           ? 'Account created! Please verify your email and wait for admin approval.'
           : 'Account created! You can now log in.',
-        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        [{
+          text: 'OK',
+          onPress: () => {
+            navigation.navigate('Login'); // Navigate back to Login.js
+          }
+        }]
       );
     } catch (error) {
       handleSignupError(error);
