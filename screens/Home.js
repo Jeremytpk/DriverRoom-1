@@ -6,14 +6,14 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext'; // Jey: Make sure this path is correct for your AuthContext
+import { useAuth } from '../context/AuthContext';
 import GroupChat from './Chat/GroupChat';
 import GroupConversation from './Chat/GroupConversation';
 import OneChat from './Chat/OneChat';
 import OneConversation from './Chat/OneConversation';
 import NewChatModal from '../screens/Chat/NewChatModal';
 import GateCodes from './GateCodes/GateCodes';
-import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, onSnapshot } from 'firebase/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const Stack = createStackNavigator();
@@ -58,15 +58,15 @@ const DriverProfileHeader = ({ userData }) => (
 );
 
 const HomeScreen = ({ navigation }) => {
-  // Jey: Destructure unreadCounts from useAuth
-  const { userData, unreadCounts } = useAuth();
+  // Jey: Destructure unreadCounts and also the new 'allowChat' setting from useAuth
+  const { userData, unreadCounts, setUserData } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [safetyTips, setSafetyTips] = useState([]);
   const [loadingTips, setLoadingTips] = useState(true);
   const scrollViewRef = useRef(null);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const autoScrollIntervalRef = useRef(null);
-  const [isSwipingForward, setIsSwipingForward] = useState(true); // For the bounce effect
+  const [isSwipingForward, setIsSwipingForward] = useState(true);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -89,6 +89,30 @@ const HomeScreen = ({ navigation }) => {
       setActiveTab('SettingsTab');
     }
   }, [route.name]);
+
+  // Jey: New useEffect to listen for changes to the current user's document
+  // This is the correct approach to get real-time updates pushed from the company.
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const db = getFirestore();
+    const userRef = doc(db, 'users', userData.uid);
+
+    const unsubscribe = onSnapshot(userRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const updatedUserData = docSnapshot.data();
+        setUserData(prevUserData => ({
+          ...prevUserData,
+          allowChat: updatedUserData.allowChat ?? true,
+          allowPosts: updatedUserData.allowPosts ?? true
+        }));
+      }
+    }, (error) => {
+      console.error("Jey: Error listening to user document:", error);
+    });
+
+    return () => unsubscribe();
+  }, [userData?.uid, setUserData]);
 
   // --- Start Auto Scroll Function (unchanged from previous fix) ---
   const startAutoScroll = () => {
@@ -262,12 +286,10 @@ const HomeScreen = ({ navigation }) => {
                   style={[styles.swiperSlide, { width: screenWidth - 40 }]}
                 >
                   <View style={styles.tipContentWrapper}>
-                    <View style={styles.tipHeaderRow}>
-                      {tip.imageUrl && (
-                        <Image source={{ uri: tip.imageUrl }} style={styles.tipImage} />
-                      )}
-                      <Text style={styles.tipTitle}>{tip.title}</Text>
-                    </View>
+                    {tip.imageUrl && (
+                      <Image source={{ uri: tip.imageUrl }} style={styles.tipImage} />
+                    )}
+                    <Text style={styles.tipTitle}>{tip.title}</Text>
                     <Text style={styles.tipMessage}>{tip.message}</Text>
                   </View>
                 </LinearGradient>
@@ -295,40 +317,43 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Main Action Buttons */}
+        {/* Jey: Main Action Buttons, now conditionally rendered for chat */}
+        {userData?.allowChat && (
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => navigation.navigate('GroupChat')}
+            >
+              <Ionicons name="people-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>Group Chats</Text>
+              {unreadCounts.group > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCounts.group}</Text>
+                </View>
+              ) : (
+                <Ionicons name="add" size={20} color={Colors.accentSalmon} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => navigation.navigate('OneChat')}
+            >
+              <Ionicons name="person-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
+              <Text style={styles.buttonText}>Direct Messages</Text>
+              {unreadCounts.one > 0 ? (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCounts.one}</Text>
+                </View>
+              ) : (
+                <Ionicons name="add" size={20} color={Colors.accentSalmon} />
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Jey: Gate Codes button is now separate from the chat buttons */}
         <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('GroupChat')}
-          >
-            <Ionicons name="people-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Group Chats</Text>
-            {/* Jey: Conditional rendering for Group Chats unread count (aggregated) */}
-            {unreadCounts.group > 0 ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCounts.group}</Text>
-              </View>
-            ) : (
-              <Ionicons name="add" size={20} color={Colors.accentSalmon} />
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('OneChat')}
-          >
-            <Ionicons name="person-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
-            <Text style={styles.buttonText}>Direct Messages</Text>
-            {/* Jey: Conditional rendering for Direct Messages unread count (aggregated) */}
-            {unreadCounts.one > 0 ? (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCounts.one}</Text>
-              </View>
-            ) : (
-              <Ionicons name="add" size={20} color={Colors.accentSalmon} />
-            )}
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={[styles.button, styles.importantButton]}
             onPress={() => navigation.navigate('GateCodes')}
@@ -338,6 +363,7 @@ const HomeScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={Colors.white} />
           </TouchableOpacity>
         </View>
+
       </ScrollView>
 
       {/* Footer Navigation Buttons (assuming it's here, or managed by MainTabs) */}
@@ -361,24 +387,28 @@ const HomeScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('PostsTab')}
-        >
-          <Ionicons
-            name="newspaper-outline"
-            size={20}
-            color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
+        {/* Jey: This Posts tab is now handled in the BottomTab component, not here */}
+        {/* Jey: Now we can use the userData.allowPosts setting here */}
+        {userData?.allowPosts && (
+          <TouchableOpacity
+            style={styles.toggleButton}
+            onPress={() => handleTabPress('PostsTab')}
           >
-            Posts
-          </Text>
-        </TouchableOpacity>
+            <Ionicons
+              name="chatbox-ellipses-outline"
+              size={20}
+              color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
+            />
+            <Text
+              style={[
+                styles.toggleButtonText,
+                { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+              ]}
+            >
+              Posts
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {userData?.role === 'admin' && (
           <TouchableOpacity
@@ -688,7 +718,7 @@ const styles = StyleSheet.create({
   },
   centralCard: {
     width: screenWidth - 40,
-    height: 150, // Fixed height for the card
+    height: 180, // Fixed height for the card
     borderRadius: 15,
     marginBottom: 30,
     shadowColor: '#000',
@@ -773,7 +803,7 @@ const styles = StyleSheet.create({
   pagination: {
     flexDirection: 'row',
     position: 'absolute',
-    bottom: 10,
+    bottom: 5,
     alignSelf: 'center',
   },
   dot: {

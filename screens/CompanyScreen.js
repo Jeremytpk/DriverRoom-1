@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, ScrollView, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image, Switch } from 'react-native';
 import { MaterialIcons, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, updateDoc, doc, orderBy, deleteDoc } from 'firebase/firestore'; // Jey: Added deleteDoc
+import { collection, query, where, getDocs, updateDoc, doc, orderBy, deleteDoc, getDoc, onSnapshot } from 'firebase/firestore';
 
 // Jey: Import the new modal components
 import NoticeModal from '../components/Notice'; // Adjust path as needed
@@ -22,6 +22,10 @@ const CompanyScreen = ({ navigation }) => {
   const [initialNotices, setInitialNotices] = useState([]);
   const [initialSafetyTips, setInitialSafetyTips] = useState([]);
 
+  // Jey: New states for the "More" toggle switches
+  const [allowChat, setAllowChat] = useState(true);
+  const [allowPosts, setAllowPosts] = useState(true);
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -30,11 +34,75 @@ const CompanyScreen = ({ navigation }) => {
   const [isNoticeModalVisible, setIsNoticeModalVisible] = useState(false);
   const [isSafetyTipModalVisible, setIsSafetyTipModalVisible] = useState(false);
 
+  // Jey: Function to update Firestore with new settings and then update all drivers
+  // This version has robust error handling and user feedback.
+  const updateSettingsAndDrivers = useCallback(async (field, value) => {
+    if (!userData?.uid || !userData?.dspName) {
+      console.warn("Jey: User data (UID or dspName) not available to update settings.");
+      Alert.alert("Error", "User data not available. Cannot update settings.");
+      return;
+    }
+    
+    setSettingsLoading(true); // Jey: Show loading indicator while the operation is in progress
+    
+    try {
+      // Step 1: Update the company's document first (the single source of truth)
+      const companyRef = doc(db, 'users', userData.uid);
+      await updateDoc(companyRef, { [field]: value });
+      console.log(`Jey: Successfully updated company's ${field} setting to ${value}`);
+
+      // Step 2: Query for all drivers and update their documents
+      const driversQuery = query(
+          collection(db, 'users'),
+          where('dspName', '==', userData.dspName),
+          where('role', '==', 'driver')
+      );
+      const driversSnapshot = await getDocs(driversQuery);
+      
+      // Create a list of promises for all update operations
+      const driverUpdatePromises = driversSnapshot.docs.map(driverDoc => {
+          return updateDoc(doc(db, 'users', driverDoc.id), { [field]: value });
+      });
+
+      // Wait for ALL driver updates to complete before continuing
+      await Promise.all(driverUpdatePromises);
+      console.log(`Jey: Successfully propagated ${field} setting to all drivers of DSP: ${userData.dspName}`);
+      Alert.alert("Success", `Settings for all drivers have been updated.`);
+      
+    } catch (error) {
+      console.error(`Jey: Error updating company or driver settings:`, error);
+      Alert.alert("Error", `Failed to update settings. Please try again. Detailed error: ${error.message}`);
+      
+      // Jey: On failure, revert the local state to its previous value
+      if (field === 'allowChat') {
+          setAllowChat(!value);
+      } else if (field === 'allowPosts') {
+          setAllowPosts(!value);
+      }
+    } finally {
+        setSettingsLoading(false); // Jey: Hide loading indicator regardless of outcome
+    }
+
+  }, [userData]);
+
+
+  // Jey: Handlers for the new switches
+  const toggleAllowChat = (newValue) => {
+    setAllowChat(newValue);
+    updateSettingsAndDrivers('allowChat', newValue);
+  };
+
+  const toggleAllowPosts = (newValue) => {
+    setAllowPosts(newValue);
+    updateSettingsAndDrivers('allowPosts', newValue);
+  };
+
 
   // Function to fetch all company-related data
   const fetchCompanyData = async () => {
     setLoading(true);
     setRefreshing(true);
+    setSettingsLoading(true);
 
     try {
       if (!userData?.uid || !userData?.dspName) {
@@ -82,20 +150,22 @@ const CompanyScreen = ({ navigation }) => {
       setSafetyTipsCount(fetchedSafetyTips.length);
       setInitialSafetyTips(fetchedSafetyTips); // Store initial fetched data
 
-      // Jey: Fetch App Information (still here as it's not a modal content)
-      const appInfoQuery = query(
-        collection(db, 'appInfo'),
-        orderBy('createdAt', 'desc')
-      );
-      const appInfoSnapshot = await getDocs(appInfoQuery);
-      // setAppInfo(appInfoSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); // Uncomment if AppInfo is implemented
-
+      // Jey: Fetch the company-specific settings from Firestore
+      const companyRef = doc(db, 'users', userData.uid);
+      const companyDoc = await getDoc(companyRef);
+      if (companyDoc.exists()) {
+        const settingsData = companyDoc.data();
+        // Jey: Use logical OR to default to true if the field is not present
+        setAllowChat(settingsData.allowChat ?? true);
+        setAllowPosts(settingsData.allowPosts ?? true);
+      }
     } catch (error) {
       console.error("Jey: Error fetching company data:", error);
       Alert.alert("Error", "Failed to load data. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setSettingsLoading(false);
     }
   };
 
@@ -253,7 +323,7 @@ const CompanyScreen = ({ navigation }) => {
               data={gateCodes}
               renderItem={({ item }) => (
                 <View style={styles.codeItem}>
-                  <View> {/* Jey: Added a View to group text elements */}
+                  <View>
                     <Text style={styles.codeText}>{item.code}</Text>
                     <Text style={styles.codeLocation}>{item.location}</Text>
                   </View>
@@ -315,6 +385,42 @@ const CompanyScreen = ({ navigation }) => {
       case 'more':
         return (
           <ScrollView contentContainerStyle={styles.moreContentContainer}>
+            {/* Jey: New Switch for Chat */}
+            <View style={styles.moreOptionButton}>
+              <View style={styles.moreOptionTextContainer}>
+                <MaterialIcons name="chat" size={24} color="#6BB9F0" />
+                <Text style={styles.moreOptionText}>Allow Chat</Text>
+              </View>
+              {settingsLoading ? (
+                <ActivityIndicator size="small" color="#6BB9F0" />
+              ) : (
+                <Switch
+                  onValueChange={toggleAllowChat}
+                  value={allowChat}
+                  trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                  thumbColor={allowChat ? "#fff" : "#f4f3f4"}
+                />
+              )}
+            </View>
+
+            {/* Jey: New Switch for Posts */}
+            <View style={styles.moreOptionButton}>
+              <View style={styles.moreOptionTextContainer}>
+                <MaterialIcons name="post-add" size={24} color="#6BB9F0" />
+                <Text style={styles.moreOptionText}>Allow Posts</Text>
+              </View>
+              {settingsLoading ? (
+                <ActivityIndicator size="small" color="#6BB9F0" />
+              ) : (
+                <Switch
+                  onValueChange={toggleAllowPosts}
+                  value={allowPosts}
+                  trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                  thumbColor={allowPosts ? "#fff" : "#f4f3f4"}
+                />
+              )}
+            </View>
+
             <TouchableOpacity
               style={styles.moreOptionButton}
               onPress={() => setIsNoticeModalVisible(true)} // Jey: Open the Notice modal
@@ -338,18 +444,6 @@ const CompanyScreen = ({ navigation }) => {
               <MaterialIcons name="settings" size={24} color="#6BB9F0" />
               <Text style={styles.moreOptionText}>Company Settings</Text>
             </TouchableOpacity>
-
-            {/* App Information Section */}
-            {/* <View style={styles.appInfoSection}>
-              <Text style={styles.appInfoSectionTitle}>App Information & Updates</Text>
-              <FlatList
-                data={appInfo}
-                renderItem={({ item }) => renderContentItem({ item, collectionName: 'appInfo' })}
-                keyExtractor={item => item.id}
-                ListEmptyComponent={<Text style={styles.emptyListText}>No app updates available.</Text>}
-                scrollEnabled={false}
-              />
-            </View> */}
           </ScrollView>
         );
       default:
@@ -582,9 +676,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 15,
     marginBottom: 10,
-    flexDirection: 'row', // Jey: Add flexDirection to align items horizontally
-    justifyContent: 'space-between', // Jey: Distribute space between code info and delete icon
-    alignItems: 'center', // Jey: Vertically align items
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   codeText: {
     fontSize: 18,
@@ -595,9 +689,8 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 5,
   },
-  // Jey: New style for the delete icon button
   deleteIcon: {
-    padding: 5, // Add some padding for easier tapping
+    padding: 5,
   },
   addBtn: {
     backgroundColor: '#FF9AA2',
@@ -685,6 +778,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   moreContentContainer: {
+    padding: 15,
     paddingBottom: 20,
   },
   moreOptionButton: {
@@ -694,35 +788,23 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  moreOptionTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   moreOptionText: {
     marginLeft: 15,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-  },
-  appInfoSection: {
-    marginTop: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  appInfoSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
-    marginBottom: 10,
-    textAlign: 'center',
   },
 });
 
