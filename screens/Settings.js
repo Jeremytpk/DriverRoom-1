@@ -1,13 +1,13 @@
-import React, { useEffect, useState } from 'react';
+// Settings.js
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { auth } from '../firebase'; // Assuming firebase.js exports auth
+import { Ionicons } from '@expo/vector-icons';
+import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { useNavigation, useRoute } from '@react-navigation/native'; // Import these hooks
+import { useNavigation } from '@react-navigation/native';
 
-// Centralized Color Palette (copy-pasted for self-containment, but ideally imported)
 const Colors = {
-  primaryTeal: '#007070', // Slightly darker teal
+  primaryTeal: '#007070',
   accentSalmon: '#FA8072',
   lightBackground: '#f8f8f8',
   white: '#FFFFFF',
@@ -15,83 +15,25 @@ const Colors = {
   mediumText: '#666666',
   lightGray: '#ececec',
   border: '#e0e0e0',
-  redAccent: '#FF5733', // A more vibrant red for alerts/actions
-  inactiveGray: '#A0A0A0', // Added for inactive tab icons/text
+  redAccent: '#FF5733',
+  inactiveGray: '#A0A0A0',
 };
 
 const Settings = () => {
   const { currentUser, userData } = useAuth();
-
-  const currentNavigation = useNavigation();
-  const route = useRoute();
-  const [activeTab, setActiveTab] = useState('SettingsTab');
-
-  useEffect(() => {
-    const currentRouteName = route.name;
-
-    if (currentRouteName === 'Home') {
-      setActiveTab('HomeTab');
-    } else if (currentRouteName === 'Posts') {
-      setActiveTab('PostsTab');
-    } else if (currentRouteName === 'AdminTab') {
-      setActiveTab('AdminTab');
-    } else if (currentRouteName === 'CompanyTab') {
-      setActiveTab('CompanyTab');
-    } else if (currentRouteName === 'Settings') {
-      setActiveTab('SettingsTab');
-    }
-  }, [route.name]);
+  const navigation = useNavigation();
 
   const handleLogout = async () => {
     try {
       await auth.signOut();
       console.log("Jey: User logged out successfully.");
-      currentNavigation.reset({
+      navigation.reset({
         index: 0,
         routes: [{ name: 'Login' }],
       });
     } catch (error) {
       console.error('Jey: Logout error:', error);
       Alert.alert("Logout Failed", "Could not log out. Please try again.");
-    }
-  };
-
-  const handleTabPress = (tabName) => {
-    if (tabName === activeTab) {
-      if (tabName === 'HomeTab') {
-        currentNavigation.navigate('Home');
-      }
-      return;
-    }
-
-    setActiveTab(tabName);
-
-    let screenNameToNavigate = '';
-    switch (tabName) {
-      case 'HomeTab':
-        screenNameToNavigate = 'Home';
-        break;
-      case 'PostsTab':
-        screenNameToNavigate = 'Posts';
-        break;
-      case 'AdminTab':
-        screenNameToNavigate = 'AdminTab';
-        break;
-      case 'CompanyTab':
-        screenNameToNavigate = 'CompanyTab';
-        break;
-      case 'SettingsTab':
-        screenNameToNavigate = 'Settings';
-        break;
-      default:
-        screenNameToNavigate = 'Home';
-    }
-
-    if (currentNavigation.getParent()) {
-      currentNavigation.getParent().navigate(screenNameToNavigate);
-    } else {
-      console.warn(`Jey: Could not navigate to tab '${screenNameToNavigate}' via parent. Attempting direct navigation within current stack.`);
-      currentNavigation.navigate(screenNameToNavigate);
     }
   };
 
@@ -102,7 +44,7 @@ const Settings = () => {
         <View style={styles.profileSection}>
           <TouchableOpacity
             style={styles.avatarContainer}
-            onPress={() => currentNavigation.navigate('EditProfile')}
+            onPress={() => navigation.navigate('EditProfile')}
           >
             {userData?.profilePictureUrl ? (
               <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
@@ -128,7 +70,7 @@ const Settings = () => {
         <View style={styles.menu}>
           <Text style={styles.menuSectionTitle}>General</Text>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => currentNavigation.navigate('EditProfile')}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
             <Ionicons name="person-outline" size={24} color={Colors.primaryTeal} />
             <Text style={styles.menuText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
@@ -157,114 +99,11 @@ const Settings = () => {
           {/* Logout Button - Visually distinct */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={24} color={Colors.redAccent} />
-            <Text style={[styles.logoutButtonText]}>Logout</Text>
+            <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* Jey: Conditional rendering for Footer Navigation Buttons */}
-      {!(userData?.isDsp) && ( // Only show if isDsp is NOT true
-        <View style={styles.toggleButtonContainer}>
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('HomeTab')}
-          >
-            <Ionicons
-              name="home-outline"
-              size={20}
-              color={activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Home
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('PostsTab')}
-          >
-            <Ionicons
-              name="newspaper-outline"
-              size={20}
-              color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Posts
-            </Text>
-          </TouchableOpacity>
-
-          {userData?.role === 'admin' && (
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => handleTabPress('AdminTab')}
-            >
-              <MaterialIcons
-                name="admin-panel-settings"
-                size={20}
-                color={activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray}
-              />
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray }
-                ]}
-              >
-                Admin
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {userData?.role === 'company' && (
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => handleTabPress('CompanyTab')}
-            >
-              <MaterialIcons
-                name="business"
-                size={20}
-                color={activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray}
-              />
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray }
-                ]}
-              >
-                Company
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('SettingsTab')}
-          >
-            <Ionicons
-              name="settings-outline"
-              size={20}
-              color={activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Settings
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Jey: The custom toggleButtonContainer has been removed entirely */}
     </View>
   );
 };
@@ -277,7 +116,6 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     paddingVertical: 20,
     paddingHorizontal: 15,
-    paddingBottom: 80, // Added padding to account for the fixed footer
   },
   profileSection: {
     alignItems: 'center',
@@ -302,7 +140,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 50,
-    backgroundColor: Colors.lightGray, // Fallback background
+    backgroundColor: Colors.lightGray,
     borderWidth: 2,
     borderColor: Colors.border,
   },
@@ -338,15 +176,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   statusActive: {
-    backgroundColor: '#D4EDDA', // Light green
+    backgroundColor: '#D4EDDA',
   },
   statusPending: {
-    backgroundColor: '#FFE0B2', // Light orange
+    backgroundColor: '#FFE0B2',
   },
   statusText: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: Colors.darkText, // Adjust color based on background
+    color: Colors.darkText,
   },
   menu: {
     backgroundColor: Colors.white,
@@ -356,7 +194,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 5,
     elevation: 3,
-    overflow: 'hidden', // Ensures rounded corners
+    overflow: 'hidden',
   },
   menuSectionTitle: {
     fontSize: 16,
@@ -365,7 +203,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 10,
-    backgroundColor: Colors.lightBackground, // A subtle background for section titles
+    backgroundColor: Colors.lightBackground,
   },
   menuItem: {
     flexDirection: 'row',
@@ -380,7 +218,7 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     fontSize: 17,
     color: Colors.darkText,
-    flex: 1, // Allows text to take up space and push arrow to right
+    flex: 1,
   },
   menuArrow: {
     marginLeft: 10,
@@ -388,49 +226,17 @@ const styles = StyleSheet.create({
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center', // Center content for logout button
-    backgroundColor: Colors.white, // No background for item itself, let it match menu
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
     paddingVertical: 18,
-    borderTopWidth: StyleSheet.hairlineWidth, // Separate from last menu item
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
   },
   logoutButtonText: {
     marginLeft: 10,
     fontSize: 17,
     fontWeight: 'bold',
-    color: Colors.redAccent, // Make logout stand out with a red warning color
-  },
-  // Footer Navigation Styles (Copied from HomeWrapper)
-  toggleButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: Colors.white,
-    borderRadius: 0,
-    paddingVertical: 10,
-    position: 'absolute',
-    bottom: 0,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10, // Adjust for iOS home indicator
-  },
-  toggleButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginHorizontal: 0,
-  },
-  toggleButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
+    color: Colors.redAccent,
   },
 });
 
