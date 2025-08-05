@@ -1,5 +1,4 @@
-// AddGateCodeModal.js
-import React, { useState, useEffect } from 'react'; // Jey: Added useEffect
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -12,68 +11,56 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  FlatList, // Jey: Added FlatList for DSP search results
-  TouchableWithoutFeedback, // Jey: For dismissing keyboard
-  Keyboard // Jey: For dismissing keyboard
+  FlatList,
+  TouchableWithoutFeedback,
+  Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
+import { Ionicons } from '@expo/vector-icons';
 
-// Jey: Props that should be passed from GateCodes.js
 const AddGateCodeModal = ({
   visible,
   onClose,
   onSave,
   currentDspName,
-  currentUserId,
-  userDspId, // The actual DSP ID associated with the current user
-  dsps,       // Array of all DSPs
-  isAdmin     // Boolean flag if the current user is an admin
+  userDspId,
+  dsps,
+  isAdmin
 }) => {
-  const [location, setLocation] = useState(''); // Renamed 'address' to 'location' for consistency with GateCodes.js
-  const [code, setCode] = useState(''); // Renamed 'gateCode' to 'code' for consistency
+  const [location, setLocation] = useState('');
+  const [code, setCode] = useState('');
   const [notes, setNotes] = useState('');
   const [imageUri, setImageUri] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Jey: DSP Selection States
-  const [selectedDspId, setSelectedDspId] = useState(''); // Stores the ID of the selected DSP
-  const [selectedDspName, setSelectedDspName] = useState(''); // Stores the name of the selected DSP
-  const [isDspPickerVisible, setIsDspPickerVisible] = useState(false); // Controls visibility of DSP search modal
+  const [selectedDspId, setSelectedDspId] = useState('');
+  const [selectedDspName, setSelectedDspName] = useState('');
+  const [isDspPickerVisible, setIsDspPickerVisible] = useState(false);
   const [dspSearchQuery, setDspSearchQuery] = useState('');
   const [filteredDsps, setFilteredDsps] = useState([]);
 
-  // Jey: Set default DSP values on mount or when props change
   useEffect(() => {
-    if (visible) { // Only set defaults when modal becomes visible
+    if (visible) {
       if (!isAdmin) {
-        // For non-admins, default to their own DSP
         setSelectedDspId(userDspId || '');
         setSelectedDspName(currentDspName || 'N/A');
       } else {
-        // For admins, clear selection initially for explicit choice, or set first DSP
         setSelectedDspId('');
         setSelectedDspName('');
-        // Optional: If you want to default admin picker to the first DSP:
-        // if (dsps && dsps.length > 0) {
-        //   setSelectedDspId(dsps[0].id);
-        //   setSelectedDspName(dsps[0].name);
-        // }
       }
-      // Reset other form fields when modal opens
       setLocation('');
       setCode('');
       setNotes('');
       setImageUri(null);
       setDspSearchQuery('');
-      setFilteredDsps(dsps); // Initialize filtered list with all dsps
+      setFilteredDsps(dsps);
     }
   }, [visible, isAdmin, userDspId, currentDspName, dsps]);
 
-  // Jey: Filter DSPs based on search query
   useEffect(() => {
     if (dsps) {
       const lowerCaseQuery = dspSearchQuery.toLowerCase();
@@ -85,8 +72,6 @@ const AddGateCodeModal = ({
     }
   }, [dspSearchQuery, dsps]);
 
-
-  // Request media library permissions
   const requestPermissions = async () => {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -96,7 +81,7 @@ const AddGateCodeModal = ({
       }
       return true;
     }
-    return true; // Web permissions are handled differently by the browser
+    return true;
   };
 
   const pickImage = async () => {
@@ -107,7 +92,7 @@ const AddGateCodeModal = ({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.5, // Reduce quality for faster uploads
+      quality: 0.5,
     });
 
     if (!result.canceled) {
@@ -135,14 +120,23 @@ const AddGateCodeModal = ({
   };
 
   const handleSave = async () => {
+    const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
+    const dspToSaveId = isAdmin ? selectedDspId : userDspId;
+
     if (!location || !code) {
       Alert.alert('Missing Information', 'Please enter both Location/Complex Name and Gate Code.');
       return;
     }
 
-    // Jey: Validate DSP selection for admin
     if (isAdmin && !selectedDspId) {
       Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
+      return;
+    }
+    
+    // Jey: A single, final check for a valid DSP before proceeding.
+    if (!dspToSaveId || !dspToSaveName) {
+      console.error("Jey: Final validation failed. dspToSaveId:", dspToSaveId, "dspToSaveName:", dspToSaveName);
+      Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
       return;
     }
 
@@ -154,30 +148,19 @@ const AddGateCodeModal = ({
     }
 
     try {
-      // Jey: Determine which DSP's ID and Name to save
-      const dspToSaveId = isAdmin ? selectedDspId : userDspId;
-      const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
-
-      if (!dspToSaveId) {
-        Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
-        setLoading(false);
-        return;
-      }
-
+      // Jey: The 'addedBy' field has been removed here.
       await addDoc(collection(db, 'gateCodes'), {
-        location: location, // Use 'location' for consistency
-        code: code,         // Use 'code' for consistency
+        location: location,
+        code: code,
         notes: notes,
         imageUrl: imageUrl,
         createdAt: serverTimestamp(),
-        addedBy: currentUserId, // User UID who physically added this
-        dspName: dspToSaveName, // The name of the DSP this belongs to (for display/search)
-        companyId: dspToSaveId, // The actual UID of the DSP document in 'dsps' collection (for filtering)
+        dspName: dspToSaveName,
+        companyId: dspToSaveId,
       });
 
       Alert.alert('Success', 'Gate code added successfully!');
-      onSave(); // Callback to trigger re-fetch/close modal in parent
-      // Reset is handled by useEffect when modal visibility changes
+      onSave();
     } catch (e) {
       console.error("Jey: Error adding document: ", e);
       Alert.alert('Error', 'Failed to add gate code. Please try again.');
@@ -189,8 +172,8 @@ const AddGateCodeModal = ({
   const handleSelectDsp = (dsp) => {
     setSelectedDspId(dsp.id);
     setSelectedDspName(dsp.name);
-    setIsDspPickerVisible(false); // Close the DSP selection modal
-    setDspSearchQuery(''); // Clear search query
+    setIsDspPickerVisible(false);
+    Keyboard.dismiss();
   };
 
   const renderDspItem = ({ item }) => (
@@ -204,7 +187,7 @@ const AddGateCodeModal = ({
   );
 
   const handleClose = () => {
-    onClose(); // Parent will handle setting visible to false, which triggers useEffect to reset
+    onClose();
   };
 
   return (
@@ -219,7 +202,6 @@ const AddGateCodeModal = ({
           <ScrollView contentContainerStyle={styles.modalView}>
             <Text style={styles.modalTitle}>Add New Gate Code</Text>
 
-            {/* Jey: DSP Selection Section */}
             {isAdmin ? (
               <View style={styles.dspSelectionContainer}>
                 <Text style={styles.dspSelectionLabel}>Assign to DSP:</Text>
@@ -230,6 +212,7 @@ const AddGateCodeModal = ({
                   <Text style={styles.dspSelectButtonText}>
                     {selectedDspName || 'Select a DSP'}
                   </Text>
+                  <Ionicons name="chevron-down" size={20} color="#333" />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -243,9 +226,11 @@ const AddGateCodeModal = ({
               {imageUri ? (
                 <Image source={{ uri: imageUri }} style={styles.selectedImage} />
               ) : (
-                <Image source={require('../assets/gate.png')} style={styles.defaultImage} />
+                <>
+                  <Image source={require('../assets/gate.png')} style={styles.defaultImage} />
+                  <Text style={styles.imagePickerText}>Tap to Add Photo (Optional)</Text>
+                </>
               )}
-              <Text style={styles.imagePickerText}>Tap to Add Photo (Optional)</Text>
             </TouchableOpacity>
 
             <TextInput
@@ -290,38 +275,41 @@ const AddGateCodeModal = ({
             </View>
           </ScrollView>
 
-          {/* Jey: DSP Selection Modal (Searchable) */}
           <Modal
             animationType="slide"
             transparent={true}
             visible={isDspPickerVisible}
             onRequestClose={() => setIsDspPickerVisible(false)}
           >
-            <View style={styles.dspPickerOverlay}>
-              <View style={styles.dspPickerModal}>
-                <Text style={styles.dspPickerTitle}>Select a DSP</Text>
-                <TextInput
-                  style={styles.dspSearchInput}
-                  placeholder="Search DSPs..."
-                  value={dspSearchQuery}
-                  onChangeText={setDspSearchQuery}
-                  clearButtonMode="while-editing"
-                />
-                <FlatList
-                  data={filteredDsps}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderDspItem}
-                  ListEmptyComponent={<Text style={styles.emptyDspListText}>No DSPs found.</Text>}
-                  style={styles.dspList}
-                />
-                <TouchableOpacity
-                  style={styles.dspPickerCloseButton}
-                  onPress={() => setIsDspPickerVisible(false)}
-                >
-                  <Text style={styles.dspPickerCloseButtonText}>Close</Text>
-                </TouchableOpacity>
+            <TouchableWithoutFeedback onPress={() => setIsDspPickerVisible(false)}>
+              <View style={styles.dspPickerOverlay}>
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={styles.dspPickerModal}>
+                    <Text style={styles.dspPickerTitle}>Select a DSP</Text>
+                    <TextInput
+                      style={styles.dspSearchInput}
+                      placeholder="Search DSPs..."
+                      value={dspSearchQuery}
+                      onChangeText={setDspSearchQuery}
+                      clearButtonMode="while-editing"
+                    />
+                    <FlatList
+                      data={filteredDsps}
+                      keyExtractor={(item) => item.id}
+                      renderItem={renderDspItem}
+                      ListEmptyComponent={<Text style={styles.emptyDspListText}>No DSPs found.</Text>}
+                      style={styles.dspList}
+                    />
+                    <TouchableOpacity
+                      style={styles.dspPickerCloseButton}
+                      onPress={() => setIsDspPickerVisible(false)}
+                    >
+                      <Text style={styles.dspPickerCloseButtonText}>Close</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableWithoutFeedback>
               </View>
-            </View>
+            </TouchableWithoutFeedback>
           </Modal>
         </View>
       </TouchableWithoutFeedback>
@@ -338,10 +326,10 @@ const styles = StyleSheet.create({
   },
   modalView: {
     margin: 20,
-    top: 100, // Adjusted top for better visual centering on different screens
+    top: 0,
     backgroundColor: 'white',
     borderRadius: 20,
-    padding: 25, // Slightly reduced padding for more content space
+    padding: 25,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -349,10 +337,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     width: '90%',
-    maxHeight: '85%', // Adjusted maxHeight to give room for keyboard or fit screen
+    maxHeight: '85%',
   },
   modalTitle: {
-    fontSize: 24, // Slightly larger title
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
     color: '#FF9AA2',
@@ -360,13 +348,13 @@ const styles = StyleSheet.create({
   imagePickerButton: {
     width: '100%',
     height: 150,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#f0f0f0',
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     overflow: 'hidden',
-    borderWidth: 1, // Added border for clarity
+    borderWidth: 1,
     borderColor: '#ddd',
   },
   selectedImage: {
@@ -375,22 +363,21 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   defaultImage: {
-    width: 80, // Slightly smaller default icon
+    width: 150,
     height: 80,
     resizeMode: 'contain',
     tintColor: '#a0a0a0',
   },
   imagePickerText: {
     position: 'absolute',
-    top: 10, // Positioned text higher up
-    right: 10,
-    color: '#333',
-    fontSize: 12, // Smaller font for less obtrusiveness
-    fontWeight: 'bold',
-    backgroundColor: 'rgba(255,255,255,0.8)', // More opaque background
-    paddingHorizontal: 6, // Reduced padding
-    paddingVertical: 3,
+    bottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 5,
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
   },
   input: {
     width: '100%',
@@ -420,7 +407,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     alignItems: 'center',
-    justifyContent: 'center', // Center content vertically
+    justifyContent: 'center',
   },
   cancelButton: {
     backgroundColor: '#ccc',
@@ -429,18 +416,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
     alignItems: 'center',
-    justifyContent: 'center', // Center content vertically
+    justifyContent: 'center',
   },
   buttonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // Jey: New styles for DSP selection
   dspSelectionContainer: {
     width: '100%',
     marginBottom: 15,
-    alignItems: 'flex-start', // Align label to start
+    alignItems: 'flex-start',
   },
   dspSelectionLabel: {
     fontSize: 14,
@@ -486,7 +472,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  // Jey: Styles for the DSP search modal
   dspPickerOverlay: {
     flex: 1,
     justifyContent: 'center',

@@ -23,14 +23,14 @@ const PendingApproval = () => {
       if (updatedData?.activated) {
         console.log("Jey: Account activated! Redirecting user to their respective home page.");
         if (updatedData.role === 'driver') {
-          navigation.replace('MainApp', { screen: 'HomeTab' });
+          navigation.replace('Main', { screen: 'Home' });
         } else if (updatedData.role === 'company' || updatedData.role === 'dispatcher_company') {
-          navigation.replace('MainApp', { screen: 'CompanyTab' });
+          navigation.replace('Main', { screen: 'CompanyScreen' });
         } else if (updatedData.role === 'admin') {
-          navigation.replace('MainApp', { screen: 'AdminTab' });
+          navigation.replace('Main', { screen: 'AdminScreen' });
         } else {
           console.warn("Jey: Unknown role or no specific redirection defined. Navigating to HomeTab as default.");
-          navigation.replace('MainApp', { screen: 'HomeTab' });
+          navigation.replace('Main', { screen: 'Home' });
         }
       }
     } catch (error) {

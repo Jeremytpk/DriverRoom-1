@@ -28,6 +28,9 @@ import Notice from './components/Notice';
 import SafetyTips from './components/SafetyTips';
 import OneConversation from './screens/Chat/OneConversation';
 import OneChat from './screens/Chat/OneChat';
+import OnDutty from './screens/OnDutty';
+import OffDutty from './screens/OffDutty';
+import AdminScreen from './screens/AdminScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -169,6 +172,11 @@ export default function App() {
               options={{ headerShown: false }}
             />
             <Stack.Screen
+              name="AdminScreen"
+              component={AdminScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="Login"
               component={Login}
               options={{ headerShown: false }}
@@ -223,6 +231,16 @@ export default function App() {
             <Stack.Screen
               name="CreatePost"
               component={CreatePost}
+              options={{ headerShown: false, title: 'Create Post', headerTitleAlign: 'center' }}
+            />
+            <Stack.Screen
+              name="OnDutty"
+              component={OnDutty}
+              options={{ headerShown: true, title: '', headerTitleAlign: 'center' }}
+            />
+            <Stack.Screen
+              name="OffDutty"
+              component={OffDutty}
               options={{ headerShown: false, title: 'Create Post', headerTitleAlign: 'center' }}
             />
             <Stack.Screen

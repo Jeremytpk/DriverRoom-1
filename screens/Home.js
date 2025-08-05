@@ -13,8 +13,10 @@ import OneChat from './Chat/OneChat';
 import OneConversation from './Chat/OneConversation';
 import NewChatModal from '../screens/Chat/NewChatModal';
 import GateCodes from './GateCodes/GateCodes';
-import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, onSnapshot, updateDoc } from 'firebase/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
+
+import OffDutty from '../screens/OffDutty';
 
 const Stack = createStackNavigator();
 
@@ -58,11 +60,12 @@ const DriverProfileHeader = ({ userData }) => (
 );
 
 const HomeScreen = ({ navigation }) => {
-  // Jey: Destructure unreadCounts and also the new 'allowChat' setting from useAuth
   const { userData, unreadCounts, setUserData } = useAuth();
   const [modalVisible, setModalVisible] = useState(false);
   const [safetyTips, setSafetyTips] = useState([]);
+  const [notices, setNotices] = useState([]);
   const [loadingTips, setLoadingTips] = useState(true);
+  const [loadingNotices, setLoadingNotices] = useState(true);
   const scrollViewRef = useRef(null);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const autoScrollIntervalRef = useRef(null);
@@ -90,8 +93,6 @@ const HomeScreen = ({ navigation }) => {
     }
   }, [route.name]);
 
-  // Jey: New useEffect to listen for changes to the current user's document
-  // This is the correct approach to get real-time updates pushed from the company.
   useEffect(() => {
     if (!userData?.uid) return;
 
@@ -114,7 +115,6 @@ const HomeScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [userData?.uid, setUserData]);
 
-  // --- Start Auto Scroll Function (unchanged from previous fix) ---
   const startAutoScroll = () => {
     clearInterval(autoScrollIntervalRef.current);
     if (safetyTips.length > 1) {
@@ -153,42 +153,48 @@ const HomeScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
-    const fetchSafetyTips = async () => {
+    const fetchHomeData = async () => {
       setLoadingTips(true);
+      setLoadingNotices(true);
       try {
         const db = getFirestore();
         if (!userData?.dspName) {
-            console.warn("Jey: HomeScreen - userData.dspName is not available. Cannot fetch DSP-specific safety tips yet.");
+            console.warn("Jey: HomeScreen - userData.dspName is not available. Cannot fetch data.");
             setSafetyTips([]);
+            setNotices([]);
             setLoadingTips(false);
+            setLoadingNotices(false);
             return;
         }
 
-        console.log(`Jey: HomeScreen - Attempting to fetch safety tips for DSP: ${userData.dspName}`);
         const safetyCollectionRef = collection(db, 'safetyTips_by_dsp', userData.dspName, 'items');
-        const q = query(safetyCollectionRef, orderBy('createdAt', 'desc'));
-        const querySnapshot = await getDocs(q);
-        const tips = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            console.log(`Jey: Fetched tip ID: ${doc.id}, Data:`, data);
-            return { id: doc.id, ...data };
-        });
-
-        console.log(`Jey: HomeScreen - Found ${tips.length} safety tips for ${userData.dspName}.`);
+        const safetyQuery = query(safetyCollectionRef, orderBy('createdAt', 'desc'));
+        const safetySnapshot = await getDocs(safetyQuery);
+        const tips = safetySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setSafetyTips(tips);
+        setLoadingTips(false);
+
+        const noticesCollectionRef = collection(db, 'notices_by_dsp', userData.dspName, 'items');
+        const noticesQuery = query(noticesCollectionRef, orderBy('createdAt', 'desc'));
+        const noticesSnapshot = await getDocs(noticesQuery);
+        const fetchedNotices = noticesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setNotices(fetchedNotices);
+        setLoadingNotices(false);
+
       } catch (error) {
-        console.error("Jey: Error fetching safety tips from DSP collection:", error);
-        Alert.alert("Error", "Failed to load safety tips. Please try again.");
+        console.error("Jey: Error fetching home screen data:", error);
+        Alert.alert("Error", "Failed to load home screen data. Please try again.");
       } finally {
         setLoadingTips(false);
+        setLoadingNotices(false);
       }
     };
 
-    fetchSafetyTips();
+    fetchHomeData();
   }, [userData?.dspName]);
 
   useEffect(() => {
-    setIsSwipingForward(true); // Reset direction when tips change
+    setIsSwipingForward(true);
     if (safetyTips.length > 0) {
       startAutoScroll();
     } else {
@@ -200,13 +206,39 @@ const HomeScreen = ({ navigation }) => {
   const handleScrollEnd = (event) => {
     const newIndex = Math.floor(event.nativeEvent.contentOffset.x / screenWidth);
     setCurrentTipIndex(newIndex);
-    setIsSwipingForward(true); // Reset direction to forward after manual scroll
+    setIsSwipingForward(true);
     startAutoScroll();
   };
 
   const handlePullToRefresh = () => {
     setIsRefreshing(true);
-    navigation.replace('Loading');
+    if (userData?.uid) {
+      const db = getFirestore();
+      const userRef = doc(db, 'users', userData.uid);
+
+      getDoc(userRef)
+        .then(docSnap => {
+          if (docSnap.exists()) {
+            const updatedUserData = docSnap.data();
+            if (updatedUserData.role === 'driver' && !updatedUserData.isOnDutty) {
+              navigation.replace('OffDutty');
+            } else {
+            }
+          } else {
+            console.warn("Jey: User document not found during refresh.");
+          }
+        })
+        .catch(error => {
+          console.error("Jey: Error checking status on refresh:", error);
+          Alert.alert("Error", "Failed to refresh status. Please try again.");
+        })
+        .finally(() => {
+          setIsRefreshing(false);
+        });
+    } else {
+      setIsRefreshing(false);
+      console.warn("Jey: No user UID available to refresh status.");
+    }
   };
 
   const handleTabPress = (tabName) => {
@@ -260,7 +292,6 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-        {/* Safety Tips Swiper or No Tips Message - Conditional Rendering */}
         {loadingTips ? (
           <View style={styles.centralCardLoading}>
             <ActivityIndicator size="large" color={Colors.primaryTeal} />
@@ -317,7 +348,28 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Jey: Main Action Buttons, now conditionally rendered for chat */}
+        {loadingNotices ? (
+          <View style={styles.noticesCardLoading}>
+            <ActivityIndicator size="large" color={Colors.primaryTeal} />
+          </View>
+        ) : notices.length > 0 ? (
+          notices.map((notice, index) => (
+            <View key={notice.id} style={styles.noticeCard}>
+              <View style={styles.noticeHeader}>
+                <MaterialIcons name="announcement" size={24} color={Colors.white} />
+                <Text style={styles.noticeTitle}>{notice.title}</Text>
+              </View>
+              <Text style={styles.noticeMessage}>{notice.message}</Text>
+              {index < notices.length - 1 && <View style={styles.noticeDivider} />}
+            </View>
+          ))
+        ) : (
+          <View style={styles.noticesCardNoNotices}>
+            <Ionicons name="megaphone-outline" size={50} color={Colors.inactiveGray} />
+            <Text style={styles.noNoticesText}>No new notices from your DSP.</Text>
+          </View>
+        )}
+
         {userData?.allowChat && (
           <View style={styles.buttonContainer}>
             <TouchableOpacity
@@ -352,7 +404,6 @@ const HomeScreen = ({ navigation }) => {
           </View>
         )}
 
-        {/* Jey: Gate Codes button is now separate from the chat buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.button, styles.importantButton]}
@@ -366,7 +417,6 @@ const HomeScreen = ({ navigation }) => {
 
       </ScrollView>
 
-      {/* Footer Navigation Buttons (assuming it's here, or managed by MainTabs) */}
       <View style={styles.toggleButtonContainer}>
         <TouchableOpacity
           style={styles.toggleButton}
@@ -387,8 +437,6 @@ const HomeScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
 
-        {/* Jey: This Posts tab is now handled in the BottomTab component, not here */}
-        {/* Jey: Now we can use the userData.allowPosts setting here */}
         {userData?.allowPosts && (
           <TouchableOpacity
             style={styles.toggleButton}
@@ -400,7 +448,7 @@ const HomeScreen = ({ navigation }) => {
               color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
             />
             <Text
-              style={[
+            style={[
                 styles.toggleButtonText,
                 { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
               ]}
@@ -557,6 +605,79 @@ const PendingApprovalScreen = ({ navigation }) => {
 
 const HomeWrapper = () => {
   const { userData, loading } = useAuth();
+  const navigation = useNavigation();
+  const [localIsOnDutyStatus, setLocalIsOnDutyStatus] = useState(false);
+
+  // Jey: useRef to store the timer ID for the fixed 1-minute timeout
+  const fixedTimerRef = useRef(null);
+  
+  // Jey: Function to update the isOnDutty status in Firestore
+  const updateIsOnDuttyStatus = async (status) => {
+    if (userData?.uid && userData?.role === 'driver') {
+      const db = getFirestore();
+      const userRef = doc(db, 'users', userData.uid);
+      try {
+        await updateDoc(userRef, { isOnDutty: status });
+        console.log(`Jey: Driver status updated to ${status}.`);
+      } catch (error) {
+        console.error("Jey: Error updating isOnDutty status:", error);
+      }
+    }
+  };
+  
+  // Jey: This useEffect hook now handles the onSnapshot listener and the new timer logic
+  useEffect(() => {
+    if (!userData?.uid || userData?.role !== 'driver') {
+      setLocalIsOnDutyStatus(false);
+      // Jey: Clean up timer if role is not a driver or no UID exists
+      if (fixedTimerRef.current) {
+        clearTimeout(fixedTimerRef.current);
+      }
+      return;
+    }
+
+    const db = getFirestore();
+    const userRef = doc(db, 'users', userData.uid);
+
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setLocalIsOnDutyStatus(data.isOnDutty || false);
+
+        // Jey: New logic: if the driver is on-duty, start a new timer
+        if (data.isOnDutty) {
+          // Jey: Clear any existing timer to prevent multiple timers from running
+          if (fixedTimerRef.current) {
+            clearTimeout(fixedTimerRef.current);
+          }
+          // Jey: Set a new timer for 1 minute (60,000 milliseconds)
+          fixedTimerRef.current = setTimeout(() => {
+            console.log('Jey: 1 minute has passed. Setting driver to off-duty automatically.');
+            updateIsOnDuttyStatus(false);
+          }, 60000);
+        } else {
+          // Jey: If the driver is off-duty, clear the timer just in case
+          if (fixedTimerRef.current) {
+            clearTimeout(fixedTimerRef.current);
+          }
+        }
+      } else {
+        console.warn("Jey: User document not found during isOnDutty listener for UID:", userData.uid);
+        setLocalIsOnDutyStatus(false);
+      }
+    }, (error) => {
+      console.error("Jey: Error listening to driver's isOnDutty status:", error);
+      setLocalIsOnDutyStatus(false);
+    });
+
+    // Jey: Clean up the Firestore listener and the timer on component unmount
+    return () => {
+      unsubscribe();
+      if (fixedTimerRef.current) {
+        clearTimeout(fixedTimerRef.current);
+      }
+    };
+  }, [userData?.uid, userData?.role]);
 
   if (loading) {
     return (
@@ -566,58 +687,65 @@ const HomeWrapper = () => {
     );
   }
 
-  if (!userData?.activated) {
+  if (userData?.role === 'driver' && !userData?.activated) {
     return <PendingApprovalScreen />;
   }
 
+  if (userData?.role === 'driver' && userData?.activated && !localIsOnDutyStatus) {
+    return <OffDutty />;
+  }
+
+  // Jey: Removed the onResponderGrant prop since we no longer need to track user interaction
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: styles.headerStyle,
-        headerTitleStyle: styles.headerTitleStyle,
-        headerTintColor: Colors.darkText,
-        headerTitleAlign: 'center',
-        headerBackVisible: true,
-      }}
-    >
-      <Stack.Screen
-        name="HomeScreenContent"
-        component={HomeScreen}
-        options={{
-          headerShown: true,
-          header: () => <DriverProfileHeader userData={userData} />,
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: styles.headerStyle,
+          headerTitleStyle: styles.headerTitleStyle,
+          headerTintColor: Colors.darkText,
+          headerTitleAlign: 'center',
+          headerBackVisible: true,
         }}
-      />
-      <Stack.Screen
-        name="GroupChat"
-        component={GroupChat}
-        options={{ title: 'Group Chats' }}
-      />
-      <Stack.Screen
-        name="OneChat"
-        component={OneChat}
-        options={{ title: 'Direct Messages' }}
-      />
-      <Stack.Screen
-        name="GateCodes"
-        component={GateCodes}
-        options={{ title: 'Gate Codes' }}
-      />
-      <Stack.Screen
-        name="GroupConversation"
-        component={GroupConversation}
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="OneConversation"
-        component={OneConversation}
-        options={{
-          headerShown: false,
-        }}
-      />
-    </Stack.Navigator>
+      >
+        <Stack.Screen
+          name="HomeScreenContent"
+          component={HomeScreen}
+          options={{
+            headerShown: true,
+            header: () => <DriverProfileHeader userData={userData} />,
+          }}
+        />
+        <Stack.Screen
+          name="GroupChat"
+          component={GroupChat}
+          options={{ title: 'Group Chats' }}
+        />
+        <Stack.Screen
+          name="OneChat"
+          component={OneChat}
+          options={{ title: 'Direct Messages' }}
+        />
+        <Stack.Screen
+          name="GateCodes"
+          component={GateCodes}
+          options={{ title: 'Gate Codes' }}
+        />
+        <Stack.Screen
+          name="GroupConversation"
+          component={GroupConversation}
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="OneConversation"
+          component={OneConversation}
+          options={{
+            headerShown: false,
+          }}
+        />
+      </Stack.Navigator>
+    </View>
   );
 };
 
@@ -718,7 +846,7 @@ const styles = StyleSheet.create({
   },
   centralCard: {
     width: screenWidth - 40,
-    height: 180, // Fixed height for the card
+    height: 180,
     borderRadius: 15,
     marginBottom: 30,
     shadowColor: '#000',
@@ -726,8 +854,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-    overflow: 'hidden', // Crucial to clip content
-    backgroundColor: 'transparent', // Gradient will show through
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   centralCardLoading: {
     width: screenWidth - 40,
@@ -745,6 +873,66 @@ const styles = StyleSheet.create({
   },
   centralCardNoTips: {
     width: screenWidth - 40,
+    height: 180,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+    backgroundColor: Colors.white,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  swiperContentContainer: {
+  },
+  swiperSlide: {
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    borderRadius: 15,
+    padding: 15,
+  },
+  tipContentWrapper: {
+    flex: 1,
+    width: '100%',
+  },
+  tipHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tipImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 10,
+    resizeMode: 'cover',
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  tipTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.white,
+    flex: 1,
+  },
+  tipMessage: {
+    fontSize: 14,
+    color: Colors.white,
+    lineHeight: 20,
+    flex: 1,
+  },
+  pagination: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 5,
+    alignSelf: 'center',
+  },
+  noticesCardLoading: {
+    width: screenWidth - 40,
     height: 150,
     borderRadius: 15,
     justifyContent: 'center',
@@ -756,66 +944,74 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
-    padding: 10,
   },
-  swiperContentContainer: {
-    // This allows the ScrollView to properly size its content horizontally
-    // and the pagingEnabled prop to work correctly for full-width slides.
-  },
-  swiperSlide: {
-    justifyContent: 'flex-start', // Align content to the top
-    alignItems: 'flex-start', // Align content to the left
+  noticesCardNoNotices: {
+    width: screenWidth - 40,
+    height: 150,
     borderRadius: 15,
-    padding: 15, // Padding inside the gradient slide
-    // width is set inline as `screenWidth - 40`
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+    backgroundColor: Colors.white,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  tipContentWrapper: {
-    flex: 1, // Allows the content to take up available space in the slide
-    width: '100%', // Ensure content stretches
+  noNoticesText: {
+    fontSize: 16,
+    color: Colors.mediumText,
+    textAlign: 'center',
+    fontWeight: '500',
+    marginTop: 10,
   },
-  tipHeaderRow: {
+  noticeCard: {
+    width: screenWidth - 40,
+    backgroundColor: 'orange',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  noticeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8, // Space below header row
+    marginBottom: 10,
   },
-  tipImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8, // Slightly rounded corners for the image
-    marginRight: 10,
-    resizeMode: 'cover', // Ensures image fills the space
-    backgroundColor: Colors.white, // Placeholder color
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)', // Subtle border
-  },
-  tipTitle: {
+  noticeTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.white,
-    flex: 1, // Allow title to take up remaining space
+    color: 'white',
+    marginLeft: 10,
   },
-  tipMessage: {
+  noticeMessage: {
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.mediumText,
     lineHeight: 20,
-    flex: 1, // Allow message to take up remaining vertical space
   },
-  pagination: {
-    flexDirection: 'row',
-    position: 'absolute',
-    bottom: 5,
-    alignSelf: 'center',
+  noticeDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 15,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginHorizontal: 4,
+  noSafetyImage: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain',
+    tintColor: Colors.inactiveGray,
+    marginBottom: 10,
   },
-  activeDot: {
-    backgroundColor: Colors.white,
-    width: 12,
+  noSafetyText: {
+    fontSize: 16,
+    color: Colors.mediumText,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   buttonContainer: {
     width: '100%',
@@ -949,16 +1145,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.mediumText,
   },
-  // Jey: New styles for the unread badge
   badge: {
     backgroundColor: Colors.accentSalmon,
     borderRadius: 15,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    minWidth: 26, // Ensure it's visually appealing for single/double digits
+    minWidth: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 10, // Space from the text
+    marginLeft: 10,
   },
   badgeText: {
     color: Colors.white,

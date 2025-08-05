@@ -15,10 +15,9 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../firebase';
-import { collection, query, onSnapshot, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, deleteDoc, doc, where, getDocs } from 'firebase/firestore';
 import AddGateCodeModal from '../../components/AddGateCodeModal';
 import { Ionicons } from '@expo/vector-icons';
-// No longer need Swipeable or RectButton imports here
 
 const GateCodes = () => {
   const { userData, user } = useAuth();
@@ -30,10 +29,68 @@ const GateCodes = () => {
   const [currentImageUri, setCurrentImageUri] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    const q = query(collection(db, 'gateCodes'), orderBy('createdAt', 'desc'));
+  const [dsps, setDsps] = useState([]);
+  const [isDSPsLoading, setIsDSPsLoading] = useState(true);
+  const [currentDspId, setCurrentDspId] = useState(null);
+  const [isDataReady, setIsDataReady] = useState(false);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+  // Jey: This useEffect is for non-admin users to find their DSP's company ID
+  // and for admins to get the list of all DSPs.
+  useEffect(() => {
+    const fetchDspData = async () => {
+      // Jey: Handle the case where userData is not yet available
+      if (!userData?.dspName) {
+        setIsDSPsLoading(false);
+        return;
+      }
+
+      const dspsQuery = query(collection(db, 'users'), where('role', '==', 'company'));
+      const querySnapshot = await getDocs(dspsQuery);
+      const dspsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDsps(dspsList);
+      
+      // Jey: Logic to find the company ID for the currently logged-in user
+      if (userData.role !== 'admin') {
+        const foundDsp = dspsList.find(dsp => dsp.name === userData.dspName);
+        if (foundDsp) {
+          setCurrentDspId(foundDsp.id);
+          console.log("Jey: Found DSP ID for non-admin user:", foundDsp.id);
+        } else {
+          console.error("Jey: Could not find company document for dspName:", userData.dspName);
+        }
+      } else {
+        // Jey: Admins don't need a specific DSP ID pre-selected, but they need the list
+        console.log("Jey: Logged in as an admin. DSP list is ready.");
+      }
+
+      setIsDSPsLoading(false);
+    };
+
+    fetchDspData();
+  }, [userData?.role, userData?.dspName]);
+
+  // Jey: Updated query to filter by the current user's DSP name or show all for admin
+  useEffect(() => {
+    if (!userData?.dspName && userData?.role !== 'admin') {
+      setLoading(false);
+      return;
+    }
+    
+    let gateCodesQuery;
+    if (userData.role === 'admin') {
+      gateCodesQuery = query(
+        collection(db, 'gateCodes'),
+        orderBy('createdAt', 'desc')
+      );
+    } else {
+      gateCodesQuery = query(
+        collection(db, 'gateCodes'),
+        where('dspName', '==', userData.dspName),
+        orderBy('createdAt', 'desc')
+      );
+    }
+
+    const unsubscribe = onSnapshot(gateCodesQuery, (snapshot) => {
       const codes = [];
       snapshot.forEach((doc) => {
         codes.push({ id: doc.id, ...doc.data() });
@@ -48,7 +105,19 @@ const GateCodes = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userData?.dspName, userData?.role]);
+
+  useEffect(() => {
+    // Jey: isDataReady is now true when loading is false for non-admins,
+    // or when both lists are loaded for admins.
+    const isUserNonAdmin = userData?.role !== 'admin';
+    const isNonAdminDataReady = isUserNonAdmin && !loading && !isDSPsLoading && currentDspId;
+    const isAdminDataReady = userData?.role === 'admin' && !loading && !isDSPsLoading;
+
+    if (isNonAdminDataReady || isAdminDataReady) {
+      setIsDataReady(true);
+    }
+  }, [loading, isDSPsLoading, currentDspId, userData?.role]);
 
   useEffect(() => {
     if (searchQuery === '') {
@@ -65,6 +134,10 @@ const GateCodes = () => {
   }, [searchQuery, gateCodes]);
 
   const handleAddGateCode = () => {
+    if (!isDataReady) {
+        Alert.alert("Please Wait", "Loading DSP information. Please try again in a moment.");
+        return;
+    }
     setIsAddModalVisible(true);
   };
 
@@ -86,11 +159,9 @@ const GateCodes = () => {
     setCurrentImageUri(null);
   };
 
-  // --- Delete Logic (remains mostly the same) ---
-  const deleteGateCode = async (codeId, addedByUserId) => { // Added addedByUserId to check permission
-    // Optional: Add a client-side check if the current user is allowed to delete
-    if (user?.uid !== addedByUserId && userData?.role !== 'admin') {
-      Alert.alert("Permission Denied", "You can only delete gate codes you've added, or if you are an admin.");
+  const deleteGateCode = async (codeId, addedByUserId) => {
+    if (user?.uid !== addedByUserId && userData?.role !== 'admin' && userData?.role !== 'company') {
+      Alert.alert("Permission Denied", "You can only delete gate codes you've added, or if you are an admin or company manager.");
       return;
     }
 
@@ -98,10 +169,7 @@ const GateCodes = () => {
       "Delete Gate Code",
       "Are you sure you want to delete this gate code? This action cannot be undone.",
       [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           onPress: async () => {
@@ -119,10 +187,8 @@ const GateCodes = () => {
       { cancelable: true }
     );
   };
-  // --- End Delete Logic ---
 
-
-  if (loading) {
+  if (loading || isDSPsLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color="#6BB9F0" />
@@ -130,13 +196,13 @@ const GateCodes = () => {
       </View>
     );
   }
-
+  
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
         <TextInput
           style={styles.searchBar}
-          placeholder="Search by address, complex, or DSP name..."
+          placeholder="Search by address, notes, or DSP..."
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -147,9 +213,9 @@ const GateCodes = () => {
         {filteredGateCodes.length === 0 ? (
           <View style={styles.emptyStateContainer}>
             <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No matching gate codes found.' : 'No gate codes found.'}
+              {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
             </Text>
-            {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add your first entry!</Text>}
+            {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
             {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
           </View>
         ) : (
@@ -157,7 +223,7 @@ const GateCodes = () => {
             data={filteredGateCodes}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <View style={styles.codeCard}> {/* No Swipeable wrapper needed now */}
+              <View style={styles.codeCard}>
                 <TouchableOpacity
                   onPress={() => handleImageClick(item.imageUrl || require('../../assets/gate.png'))}
                   style={styles.cardImageContainer}
@@ -173,11 +239,10 @@ const GateCodes = () => {
                   {item.notes && <Text style={styles.notes}>Notes: {item.notes}</Text>}
                   {item.dspName && <Text style={styles.dspName}>Added by: {item.dspName}</Text>}
                 </View>
-                {/* Always visible Delete Button */}
-                {(user?.uid === item.addedBy || userData?.role === 'admin') && ( // Only show if user is creator or admin
+                {(user?.uid === item.addedBy || userData?.role === 'admin' || userData?.role === 'company') && (
                   <TouchableOpacity
                     style={styles.deleteIconContainer}
-                    onPress={() => deleteGateCode(item.id, item.addedBy)} // Pass ID and creator ID
+                    onPress={() => deleteGateCode(item.id, item.addedBy)}
                   >
                     <Ionicons name="trash-outline" size={24} color="#DC3545" />
                   </TouchableOpacity>
@@ -192,8 +257,11 @@ const GateCodes = () => {
           visible={isAddModalVisible}
           onClose={handleAddModalClose}
           onSave={handleGateCodeSaved}
-          currentDspName={userData?.dspName || 'N/A'}
+          currentDspName={userData?.dspName}
           currentUserId={user?.uid}
+          userDspId={currentDspId}
+          dsps={dsps}
+          isAdmin={userData?.role === 'admin'}
         />
 
         <Modal
@@ -215,7 +283,11 @@ const GateCodes = () => {
           </TouchableWithoutFeedback>
         </Modal>
 
-        <TouchableOpacity style={styles.fab} onPress={handleAddGateCode}>
+        <TouchableOpacity
+          style={[styles.fab, !isDataReady && styles.fabDisabled]}
+          onPress={handleAddGateCode}
+          disabled={!isDataReady}
+        >
           <Ionicons name="add" size={30} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -260,7 +332,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     padding: 15,
     borderRadius: 10,
-    marginBottom: 15, // Keep marginBottom here for spacing between cards
+    marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -268,7 +340,7 @@ const styles = StyleSheet.create({
     elevation: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between', // To push delete icon to the end
+    justifyContent: 'space-between',
   },
   cardImageContainer: {
     width: 80,
@@ -283,7 +355,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   cardContent: {
-    flex: 1, // Allows content to take up available space
+    flex: 1,
   },
   location: {
     fontSize: 16,
@@ -361,17 +433,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
   },
+  fabDisabled: {
+    backgroundColor: '#A0C8D6',
+  },
   fabIcon: {
     fontSize: 30,
     color: '#fff',
   },
-  // New style for the always-visible delete icon
   deleteIconContainer: {
-    marginLeft: 15, // Space it out from the content
-    padding: 5, // Make it easier to tap
-    // You can add a background or border if you want it more prominent
-    // backgroundColor: '#ffe6e6',
-    // borderRadius: 5,
+    marginLeft: 15,
+    padding: 5,
   },
 });
 

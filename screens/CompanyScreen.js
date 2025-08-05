@@ -1,92 +1,145 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, ScrollView, Image, Switch } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  ActivityIndicator, Alert, ScrollView, Image, Switch,
+  TextInput, RefreshControl
+} from 'react-native';
 import { MaterialIcons, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, updateDoc, doc, orderBy, deleteDoc, getDoc, onSnapshot } from 'firebase/firestore';
+import {
+  collection, query, where, getDocs, updateDoc, doc,
+  orderBy, deleteDoc, getDoc, onSnapshot, setDoc
+} from 'firebase/firestore';
 
-// Jey: Import the new modal components
-import NoticeModal from '../components/Notice'; // Adjust path as needed
-import SafetyTipsModal from '../components/SafetyTips'; // Adjust path as needed
+// Jey: Importing custom components
+import NoticeModal from '../components/Notice';
+import SafetyTipsModal from '../components/SafetyTips';
+import GateCodes from './GateCodes/GateCodes';
 
 const CompanyScreen = ({ navigation }) => {
   const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState('drivers');
   const [drivers, setDrivers] = useState([]);
   const [pendingDrivers, setPendingDrivers] = useState([]);
-  const [gateCodes, setGateCodes] = useState([]);
-
-  // Jey: States for notices and safety tips (now for initial display and counts)
   const [noticesCount, setNoticesCount] = useState(0);
   const [safetyTipsCount, setSafetyTipsCount] = useState(0);
   const [initialNotices, setInitialNotices] = useState([]);
   const [initialSafetyTips, setInitialSafetyTips] = useState([]);
-
-  // Jey: New states for the "More" toggle switches
   const [allowChat, setAllowChat] = useState(true);
   const [allowPosts, setAllowPosts] = useState(true);
   const [settingsLoading, setSettingsLoading] = useState(true);
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Jey: New state to control visibility of external modals
   const [isNoticeModalVisible, setIsNoticeModalVisible] = useState(false);
   const [isSafetyTipModalVisible, setIsSafetyTipModalVisible] = useState(false);
 
-  // Jey: Function to update Firestore with new settings and then update all drivers
-  // This version has robust error handling and user feedback.
+  const [driverSearchQuery, setDriverSearchQuery] = useState('');
+  const [pendingSearchQuery, setPendingSearchQuery] = useState('');
+  // Jey: onDutyDrivers now stores the actual driver objects for better UI state management
+  const [onDutyDrivers, setOnDutyDrivers] = useState([]);
+  const [onDutyCount, setOnDutyCount] = useState(0);
+
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedDrivers, setSelectedDrivers] = useState(new Set());
+
+  // Jey: Function to update company and all drivers' settings
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
       console.warn("Jey: User data (UID or dspName) not available to update settings.");
       Alert.alert("Error", "User data not available. Cannot update settings.");
       return;
     }
-    
-    setSettingsLoading(true); // Jey: Show loading indicator while the operation is in progress
-    
+
+    setSettingsLoading(true);
+
     try {
-      // Step 1: Update the company's document first (the single source of truth)
       const companyRef = doc(db, 'users', userData.uid);
       await updateDoc(companyRef, { [field]: value });
       console.log(`Jey: Successfully updated company's ${field} setting to ${value}`);
 
-      // Step 2: Query for all drivers and update their documents
       const driversQuery = query(
           collection(db, 'users'),
           where('dspName', '==', userData.dspName),
           where('role', '==', 'driver')
       );
       const driversSnapshot = await getDocs(driversQuery);
-      
-      // Create a list of promises for all update operations
+
       const driverUpdatePromises = driversSnapshot.docs.map(driverDoc => {
           return updateDoc(doc(db, 'users', driverDoc.id), { [field]: value });
       });
 
-      // Wait for ALL driver updates to complete before continuing
       await Promise.all(driverUpdatePromises);
       console.log(`Jey: Successfully propagated ${field} setting to all drivers of DSP: ${userData.dspName}`);
       Alert.alert("Success", `Settings for all drivers have been updated.`);
-      
+
     } catch (error) {
       console.error(`Jey: Error updating company or driver settings:`, error);
       Alert.alert("Error", `Failed to update settings. Please try again. Detailed error: ${error.message}`);
-      
-      // Jey: On failure, revert the local state to its previous value
+
       if (field === 'allowChat') {
           setAllowChat(!value);
       } else if (field === 'allowPosts') {
           setAllowPosts(!value);
       }
     } finally {
-        setSettingsLoading(false); // Jey: Hide loading indicator regardless of outcome
+        setSettingsLoading(false);
     }
-
   }, [userData]);
 
+  // Jey: Logic to add a single driver to on-duty
+  const handleAddToOnDuty = async (driverId, driverName) => {
+    try {
+      const userRef = doc(db, 'users', driverId);
+      await updateDoc(userRef, { isOnDutty: true });
+      Alert.alert("Success", `${driverName} has been added to the on-duty list.`);
+    } catch (error) {
+      console.error("Jey: Error adding driver to on-duty list:", error);
+      Alert.alert("Error", "Failed to add driver to on-duty list. Please try again.");
+    }
+  };
 
-  // Jey: Handlers for the new switches
+  // Jey: Logic to add multiple drivers to on-duty using multi-select
+  const handleMultiSelectOnDuty = async () => {
+    if (selectedDrivers.size === 0) {
+      Alert.alert("No Drivers Selected", "Please select at least one driver to mark as on-duty.");
+      return;
+    }
+
+    setLoading(true);
+    const updatePromises = [];
+
+    for (const driverId of selectedDrivers) {
+      const userRef = doc(db, 'users', driverId);
+      updatePromises.push(updateDoc(userRef, { isOnDutty: true }));
+    }
+
+    try {
+      await Promise.all(updatePromises);
+      Alert.alert("Success", `${selectedDrivers.size} drivers have been marked as on-duty.`);
+      setSelectedDrivers(new Set());
+      setMultiSelectMode(false);
+    } catch (error) {
+      console.error("Jey: Error adding multiple drivers to on-duty list:", error);
+      Alert.alert("Error", "Failed to add drivers. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Jey: Logic to remove a single driver from on-duty
+  const handleRemoveFromOnDuty = async (driverId, driverName) => {
+    try {
+      const userRef = doc(db, 'users', driverId);
+      await updateDoc(userRef, { isOnDutty: false });
+      Alert.alert("Success", `${driverName} has been removed from on-duty.`);
+    } catch (error) {
+      console.error("Jey: Error removing driver from on-duty:", error);
+      Alert.alert("Error", "Failed to remove driver. Please try again.");
+    }
+  };
+
+  // Jey: Toggle functions for chat and posts permissions
   const toggleAllowChat = (newValue) => {
     setAllowChat(newValue);
     updateSettingsAndDrivers('allowChat', newValue);
@@ -97,8 +150,7 @@ const CompanyScreen = ({ navigation }) => {
     updateSettingsAndDrivers('allowPosts', newValue);
   };
 
-
-  // Function to fetch all company-related data
+  // Jey: Main data fetching function
   const fetchCompanyData = async () => {
     setLoading(true);
     setRefreshing(true);
@@ -110,7 +162,7 @@ const CompanyScreen = ({ navigation }) => {
         return;
       }
 
-      // Fetch drivers
+      // Fetch all drivers for the DSP
       const driversQuery = query(
         collection(db, 'users'),
         where('dspName', '==', userData.dspName),
@@ -122,15 +174,7 @@ const CompanyScreen = ({ navigation }) => {
       setDrivers(driversData.filter(d => d.activated));
       setPendingDrivers(driversData.filter(d => !d.activated));
 
-      // Fetch gate codes
-      const codesQuery = query(
-        collection(db, 'gateCodes'),
-        where('companyId', '==', userData.uid)
-      );
-      const codesSnapshot = await getDocs(codesQuery);
-      setGateCodes(codesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-
-      // Jey: Fetch Notices for initial count and pass to modal
+      // Fetch notices and safety tips counts and initial data
       const noticesQuery = query(
         collection(db, 'notices_by_dsp', userData.dspName, 'items'),
         orderBy('createdAt', 'desc')
@@ -138,9 +182,8 @@ const CompanyScreen = ({ navigation }) => {
       const noticesSnapshot = await getDocs(noticesQuery);
       const fetchedNotices = noticesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setNoticesCount(fetchedNotices.length);
-      setInitialNotices(fetchedNotices); // Store initial fetched data
+      setInitialNotices(fetchedNotices);
 
-      // Jey: Fetch Safety Tips for initial count and pass to modal
       const safetyTipsQuery = query(
         collection(db, 'safetyTips_by_dsp', userData.dspName, 'items'),
         orderBy('createdAt', 'desc')
@@ -148,14 +191,13 @@ const CompanyScreen = ({ navigation }) => {
       const safetyTipsSnapshot = await getDocs(safetyTipsQuery);
       const fetchedSafetyTips = safetyTipsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSafetyTipsCount(fetchedSafetyTips.length);
-      setInitialSafetyTips(fetchedSafetyTips); // Store initial fetched data
+      setInitialSafetyTips(fetchedSafetyTips);
 
-      // Jey: Fetch the company-specific settings from Firestore
+      // Fetch company settings
       const companyRef = doc(db, 'users', userData.uid);
       const companyDoc = await getDoc(companyRef);
       if (companyDoc.exists()) {
         const settingsData = companyDoc.data();
-        // Jey: Use logical OR to default to true if the field is not present
         setAllowChat(settingsData.allowChat ?? true);
         setAllowPosts(settingsData.allowPosts ?? true);
       }
@@ -168,26 +210,50 @@ const CompanyScreen = ({ navigation }) => {
       setSettingsLoading(false);
     }
   };
+  
+  // Jey: Real-time listener for on-duty drivers.
+  useEffect(() => {
+    if (!userData?.dspName) return;
 
+    const onDutyQuery = query(
+      collection(db, 'users'),
+      where('dspName', '==', userData.dspName),
+      where('role', '==', 'driver'),
+      where('isOnDutty', '==', true)
+    );
+    const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
+      const onDutyDriversList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setOnDutyDrivers(onDutyDriversList);
+      setOnDutyCount(onDutyDriversList.length);
+    }, (error) => {
+      console.error("Jey: Error listening to on-duty drivers:", error);
+    });
+
+    return () => unsubscribe();
+  }, [userData?.dspName]);
+
+  // Jey: Initial data fetch on component mount
   useEffect(() => {
     fetchCompanyData();
   }, [userData]);
 
-  // Jey: Callbacks to update counts from the modal components
+  // Jey: Callback functions for modal updates
   const handleNoticesUpdated = (updatedNotices) => {
     setNoticesCount(updatedNotices.length);
-    setInitialNotices(updatedNotices); // Keep initial data in sync
+    setInitialNotices(updatedNotices);
   };
 
   const handleSafetyTipsUpdated = (updatedTips) => {
     setSafetyTipsCount(updatedTips.length);
-    setInitialSafetyTips(updatedTips); // Keep initial data in sync
+    setInitialSafetyTips(updatedTips);
   };
 
+  // Jey: Refresh handler for pull-to-refresh
   const handleRefresh = () => {
     fetchCompanyData();
   };
 
+  // Jey: Logic to activate or deactivate a driver
   const handleActivation = async (driverId, activate) => {
     try {
       await updateDoc(doc(db, 'users', driverId), {
@@ -213,138 +279,187 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: New function to handle gate code deletion
-  const handleDeleteGateCode = async (codeId) => {
-    Alert.alert(
-      "Delete Gate Code",
-      "Are you sure you want to delete this gate code?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, 'gateCodes', codeId));
-              setGateCodes(prev => prev.filter(code => code.id !== codeId));
-              Alert.alert("Success", "Gate code deleted successfully!");
-            } catch (error) {
-              console.error("Jey: Error deleting gate code:", error);
-              Alert.alert("Error", "Failed to delete gate code. Please try again.");
-            }
-          }
-        }
-      ],
-      { cancelable: true }
+  // Jey: Filtering logic for search bars
+  const filteredDrivers = drivers.filter(d =>
+    d.name.toLowerCase().includes(driverSearchQuery.toLowerCase())
+  );
+  const filteredPendingDrivers = pendingDrivers.filter(d =>
+    d.name.toLowerCase().includes(pendingSearchQuery.toLowerCase())
+  );
+
+  // Jey: Multi-select logic for drivers
+  const toggleDriverSelection = (driverId) => {
+    setSelectedDrivers(prevSelected => {
+      const newSelected = new Set(prevSelected);
+      if (newSelected.has(driverId)) {
+        newSelected.delete(driverId);
+      } else {
+        newSelected.add(driverId);
+      }
+      return newSelected;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDrivers.size === filteredDrivers.length) {
+      setSelectedDrivers(new Set());
+    } else {
+      const allDriverIds = new Set(filteredDrivers.map(d => d.id));
+      setSelectedDrivers(allDriverIds);
+    }
+  };
+
+  // Jey: Render function for each driver item in the list
+  const renderDriverItem = ({ item }) => {
+    const isPending = !item.activated;
+    const isOnDuty = onDutyDrivers.some(d => d.id === item.id);
+
+    return (
+      <View style={styles.listItem}>
+        <View style={styles.driverInfo}>
+          {multiSelectMode && !isPending && (
+            <TouchableOpacity onPress={() => toggleDriverSelection(item.id)} style={styles.checkboxContainer}>
+              <Ionicons
+                name={selectedDrivers.has(item.id) ? "checkbox-outline" : "square-outline"}
+                size={24}
+                color={selectedDrivers.has(item.id) ? '#FF9AA2' : '#999'}
+              />
+            </TouchableOpacity>
+          )}
+          {item.profilePhotoURL ? (
+            <Image
+              key={item.id} // Jey: Added key to help with potential re-rendering issues
+              source={{ uri: item.profilePhotoURL }}
+              style={styles.driverProfilePhoto}
+            />
+          ) : (
+            <FontAwesome name="user-circle" size={30} color="#6BB9F0" style={styles.driverProfilePhotoPlaceholder} />
+          )}
+          <Text style={styles.driverName}>{item.name}</Text>
+          {isPending ? (
+            <MaterialIcons name="pending" size={20} color="orange" />
+          ) : (
+            <MaterialIcons name="verified" size={20} color="green" />
+          )}
+        </View>
+
+        <View style={styles.actionButtons}>
+          {isPending ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.activateBtn]}
+              onPress={() => handleActivation(item.id, true)}
+            >
+              <Text style={styles.btnText}>Activate</Text>
+            </TouchableOpacity>
+          ) : (
+            !multiSelectMode && (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionBtn, isOnDuty && styles.activeActionBtn]}
+                  onPress={() => isOnDuty ? handleRemoveFromOnDuty(item.id, item.name) : handleAddToOnDuty(item.id, item.name)}
+                >
+                  <Ionicons name="car-outline" size={20} color={isOnDuty ? '#fff' : '#6BB9F0'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.deactivateBtn]}
+                  onPress={() => handleActivation(item.id, false)}
+                >
+                  <MaterialIcons name="person-remove" size={20} color="#fff" />
+                </TouchableOpacity>
+              </>
+            )
+          )}
+        </View>
+      </View>
     );
   };
 
-
-  const renderDriverItem = ({ item }) => (
-    <View style={styles.listItem}>
-      <View style={styles.driverInfo}>
-        {item.profilePhotoURL ? (
-          <Image source={{ uri: item.profilePhotoURL }} style={styles.driverProfilePhoto} />
-        ) : (
-          <FontAwesome name="user-circle" size={30} color="#6BB9F0" style={styles.driverProfilePhotoPlaceholder} />
-        )}
-        <Text style={styles.driverName}>{item.name}</Text>
-        {item.activated ? (
-          <MaterialIcons name="verified" size={20} color="green" />
-        ) : (
-          <MaterialIcons name="pending" size={20} color="orange" />
-        )}
-      </View>
-      {!item.activated && (
-        <TouchableOpacity
-          style={styles.activateBtn}
-          onPress={() => handleActivation(item.id, true)}
-        >
-          <Text style={styles.btnText}>Activate</Text>
-        </TouchableOpacity>
-      )}
-      {item.activated && (
-        <TouchableOpacity
-          style={[styles.activateBtn, styles.deactivateBtn]}
-          onPress={() => handleActivation(item.id, false)}
-        >
-          <Text style={styles.btnText}>Deactivate</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-
+  // Jey: Conditional rendering for tab content
   const renderTabContent = () => {
     switch (activeTab) {
       case 'drivers':
         return (
-          <>
+          <ScrollView contentContainerStyle={styles.scrollContentContainer} refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }>
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search active drivers..."
+              value={driverSearchQuery}
+              onChangeText={setDriverSearchQuery}
+              placeholderTextColor="#999"
+            />
             <View style={styles.statsCard}>
-              <Text style={styles.statsTitle}>Total Active Drivers</Text>
-              <Text style={styles.statsValue}>{drivers.length}</Text>
+                <View style={styles.statsCountRow}>
+                    <View>
+                        <Text style={styles.statsTitle}>Total Active Drivers</Text>
+                        <Text style={styles.statsValue}>{drivers.length}</Text>
+                    </View>
+                    <View style={styles.onDutyContainer}>
+                        <Text style={styles.onDutyTitle}>On-Duty</Text>
+                        <Text style={styles.statsValue}>{onDutyCount}</Text>
+                    </View>
+                </View>
+                <TouchableOpacity
+                    style={styles.onDutyButton}
+                    onPress={() => navigation.navigate('OnDutty')}
+                >
+                    <Text style={styles.onDutyButtonText}>Manage On-Duty List</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#fff" />
+                </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={styles.selectDriversButton}
+              onPress={() => {
+                setMultiSelectMode(!multiSelectMode);
+                if (multiSelectMode) {
+                  setSelectedDrivers(new Set());
+                }
+              }}
+            >
+              <Text style={styles.selectDriversButtonText}>
+                {multiSelectMode ? 'Cancel Selection' : 'Select Drivers'}
+              </Text>
+            </TouchableOpacity>
+
             <FlatList
-              data={drivers}
+              data={filteredDrivers}
               renderItem={renderDriverItem}
               keyExtractor={item => item.id}
               ListEmptyComponent={<Text style={styles.emptyListText}>No active drivers found.</Text>}
-              contentContainerStyle={styles.listContentContainer}
+              scrollEnabled={false}
             />
-          </>
+          </ScrollView>
         );
       case 'requests':
         return (
-          <>
+          <ScrollView contentContainerStyle={styles.scrollContentContainer}>
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search pending requests..."
+              value={pendingSearchQuery}
+              onChangeText={setPendingSearchQuery}
+              placeholderTextColor="#999"
+            />
             <View style={styles.statsCard}>
               <Text style={styles.statsTitle}>Pending Approvals</Text>
               <Text style={styles.statsValue}>{pendingDrivers.length}</Text>
             </View>
             <FlatList
-              data={pendingDrivers}
+              data={filteredPendingDrivers}
               renderItem={renderDriverItem}
               keyExtractor={item => item.id}
               ListEmptyComponent={<Text style={styles.emptyListText}>No pending driver requests.</Text>}
-              contentContainerStyle={styles.listContentContainer}
+              scrollEnabled={false}
             />
-          </>
+          </ScrollView>
         );
       case 'gatecodes':
-        return (
-          <>
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={() => navigation.navigate('AddGateCode')}
-            >
-              <Text style={styles.addBtnText}>+ Add New Gate Code</Text>
-            </TouchableOpacity>
-            <FlatList
-              data={gateCodes}
-              renderItem={({ item }) => (
-                <View style={styles.codeItem}>
-                  <View>
-                    <Text style={styles.codeText}>{item.code}</Text>
-                    <Text style={styles.codeLocation}>{item.location}</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteGateCode(item.id)}
-                    style={styles.deleteIcon}
-                  >
-                    <MaterialIcons name="delete" size={24} color="#FF5733" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              keyExtractor={item => item.id}
-              ListEmptyComponent={<Text style={styles.emptyListText}>No gate codes added yet.</Text>}
-              contentContainerStyle={styles.listContentContainer}
-            />
-          </>
-        );
+        return <GateCodes />;
       case 'chat':
         return (
           <ScrollView style={styles.chatSectionScrollView} contentContainerStyle={styles.chatSectionContentContainer}>
-            {/* Jey: Safety Tips Section - simplified display */}
             <View style={styles.chatInfoSection}>
               <Text style={styles.chatInfoSectionTitle}>Safety Tips</Text>
               <Text style={styles.chatInfoSummaryText}>Total: {safetyTipsCount} tips available.</Text>
@@ -353,7 +468,6 @@ const CompanyScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Jey: Notices Section - simplified display */}
             <View style={styles.chatInfoSection}>
               <Text style={styles.chatInfoSectionTitle}>Company Notices</Text>
               <Text style={styles.chatInfoSummaryText}>Total: {noticesCount} notices published.</Text>
@@ -362,7 +476,6 @@ const CompanyScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* Jey: Chat Buttons */}
             <View style={styles.chatButtonsContainer}>
               <TouchableOpacity
                 style={styles.chatButton}
@@ -376,7 +489,7 @@ const CompanyScreen = ({ navigation }) => {
                 style={styles.chatButton}
                 onPress={() => navigation.navigate('OneChat')}
               >
-                <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
+              <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
                 <Text style={styles.chatButtonText}>Start One-on-One Chat</Text>
               </TouchableOpacity>
             </View>
@@ -385,7 +498,6 @@ const CompanyScreen = ({ navigation }) => {
       case 'more':
         return (
           <ScrollView contentContainerStyle={styles.moreContentContainer}>
-            {/* Jey: New Switch for Chat */}
             <View style={styles.moreOptionButton}>
               <View style={styles.moreOptionTextContainer}>
                 <MaterialIcons name="chat" size={24} color="#6BB9F0" />
@@ -403,7 +515,6 @@ const CompanyScreen = ({ navigation }) => {
               )}
             </View>
 
-            {/* Jey: New Switch for Posts */}
             <View style={styles.moreOptionButton}>
               <View style={styles.moreOptionTextContainer}>
                 <MaterialIcons name="post-add" size={24} color="#6BB9F0" />
@@ -423,7 +534,7 @@ const CompanyScreen = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.moreOptionButton}
-              onPress={() => setIsNoticeModalVisible(true)} // Jey: Open the Notice modal
+              onPress={() => setIsNoticeModalVisible(true)}
             >
               <MaterialIcons name="announcement" size={24} color="#6BB9F0" />
               <Text style={styles.moreOptionText}>Notices ({noticesCount})</Text>
@@ -431,7 +542,7 @@ const CompanyScreen = ({ navigation }) => {
 
             <TouchableOpacity
               style={styles.moreOptionButton}
-              onPress={() => setIsSafetyTipModalVisible(true)} // Jey: Open the Safety Tips modal
+              onPress={() => setIsSafetyTipModalVisible(true)}
             >
               <MaterialIcons name="security" size={24} color="#6BB9F0" />
               <Text style={styles.moreOptionText}>Safety Tips ({safetyTipsCount})</Text>
@@ -451,6 +562,7 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
+  // Jey: Loading indicator for initial data fetch
   if (loading) {
     return (
       <View style={styles.centeredContainer}>
@@ -495,7 +607,7 @@ const CompanyScreen = ({ navigation }) => {
               size={24}
               color={activeTab === tab ? '#FF9AA2' : '#666'}
             />
-            <Text style={[styles.tabText, activeTab === tab && styles.tabText]}>
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
               {tab === 'more' ? 'More' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
           </TouchableOpacity>
@@ -506,7 +618,24 @@ const CompanyScreen = ({ navigation }) => {
         {renderTabContent()}
       </View>
 
-      {/* Jey: Render the extracted Notice and Safety Tips Modals */}
+      {multiSelectMode && (
+        <View style={styles.multiSelectActionContainer}>
+          <TouchableOpacity style={styles.multiSelectButton} onPress={toggleSelectAll}>
+            <Text style={styles.multiSelectButtonText}>
+              {selectedDrivers.size === filteredDrivers.length ? 'Deselect All' : 'Select All'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.multiSelectButton, styles.confirmButton, selectedDrivers.size === 0 && styles.disabledButton]}
+            onPress={handleMultiSelectOnDuty}
+            disabled={selectedDrivers.size === 0}
+          >
+            <Ionicons name="add-circle-outline" size={20} color="#fff" />
+            <Text style={[styles.multiSelectButtonText, {marginLeft: 5}]}>Mark {selectedDrivers.size} On-Duty</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <NoticeModal
         isVisible={isNoticeModalVisible}
         onClose={() => setIsNoticeModalVisible(false)}
@@ -575,6 +704,19 @@ const styles = StyleSheet.create({
   refreshIconContainer: {
     padding: 5,
   },
+  selectDriversButton: {
+    backgroundColor: '#E0F2F7',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  selectDriversButtonText: {
+    color: '#6BB9F0',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -617,6 +759,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  statsCountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   statsTitle: {
     fontSize: 16,
     color: '#666',
@@ -626,6 +774,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6BB9F0',
     marginTop: 5,
+  },
+  onDutyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF9AA2',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  onDutyTitle: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  onDutyValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  onDutyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#6BB9F0',
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  onDutyButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginRight: 10,
   },
   listItem: {
     backgroundColor: '#fff',
@@ -657,51 +837,50 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     marginRight: 5,
   },
-  activateBtn: {
-    backgroundColor: '#6BB9F0',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionBtn: {
+    padding: 8,
     borderRadius: 5,
     marginLeft: 10,
+    backgroundColor: '#E0F2F7',
+  },
+  activeActionBtn: {
+    backgroundColor: '#6BB9F0',
   },
   deactivateBtn: {
     backgroundColor: '#FF5733',
+  },
+  activateBtn: {
+    backgroundColor: '#6BB9F0',
   },
   btnText: {
     color: '#fff',
     fontWeight: 'bold',
   },
-  codeItem: {
-    backgroundColor: '#fff',
+  searchBar: {
+    height: 45,
+    borderColor: '#ddd',
+    borderWidth: 1,
     borderRadius: 8,
-    padding: 15,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  codeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  codeLocation: {
-    color: '#666',
-    marginTop: 5,
-  },
-  deleteIcon: {
-    padding: 5,
-  },
-  addBtn: {
-    backgroundColor: '#FF9AA2',
-    padding: 15,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingHorizontal: 15,
+    fontSize: 16,
     marginBottom: 15,
+    backgroundColor: '#f1f1f1',
+    color: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  addBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  emptyListText: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+    color: '#999',
   },
   chatSectionScrollView: {
     flex: 1,
@@ -805,6 +984,45 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+  },
+  checkboxContainer: {
+    marginRight: 10,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  multiSelectActionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  multiSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#E0F2F7',
+  },
+  multiSelectButtonText: {
+    color: '#6BB9F0',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  confirmButton: {
+    backgroundColor: '#FF9AA2',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
 });
 

@@ -6,21 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert, // Keeping Alert as per your original code, but generally prefer custom modals for better UX.
+  Alert,
   Image,
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { doc, getDoc } from 'firebase/firestore'; // Jey: Import Firestore functions
+import { db } from '../../firebase'; // Jey: Assuming 'db' is exported from your firebase.js
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth(); // Assuming login function is provided by AuthContext
+  const { login } = useAuth();
   const navigation = useNavigation();
 
   const handleLogin = async () => {
@@ -31,15 +34,44 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const { userData } = await login(email, password); // userData should contain isDsp and activated
+      const { user } = await login(email, password); // Jey: Get the raw user object from login
 
-      // Jey: Updated navigation logic based on isDsp and activated status
-      if (userData?.isDsp) {
-        navigation.navigate('CompanyScreen'); // Navigate to CompanyScreen if isDsp is true
-      } else if (userData?.activated) {
-        navigation.navigate('Home'); // Navigate to Home if activated (and not isDsp)
+      if (!user || !user.uid) {
+        throw new Error("User object or UID not found after login.");
+      }
+
+      // Jey: Fetch the user's document directly from Firestore to get the latest status
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (!userDocSnap.exists()) {
+        console.warn("Jey: User document does not exist for UID:", user.uid);
+        // Jey: Handle case where user document might not exist (e.g., new user, or data inconsistency)
+        // You might want to navigate to a profile setup screen or a default dashboard
+        navigation.navigate('PendingApproval'); // Or a more appropriate fallback
+        return;
+      }
+
+      const userDataFromFirestore = userDocSnap.data();
+
+      // Jey: Updated navigation logic to handle different user roles and isOnDutty status
+      if (userDataFromFirestore?.isAdmin) {
+        navigation.navigate('AdminScreen');
+      } else if (userDataFromFirestore?.isDsp) {
+        navigation.navigate('CompanyScreen');
+      } else if (userDataFromFirestore?.role === 'driver') { // Jey: Check if the user is a driver
+        if (userDataFromFirestore?.activated && userDataFromFirestore?.isOnDutty) {
+          navigation.navigate('Home');
+        } else if (userDataFromFirestore?.activated && !userDataFromFirestore?.isOnDutty) {
+          navigation.navigate('OffDutty');
+        } else {
+          // Jey: If driver is not activated, they go to PendingApproval
+          navigation.navigate('PendingApproval');
+        }
       } else {
-        navigation.navigate('PendingApproval'); // Navigate to PendingApproval if not activated
+        // Jey: Fallback for any other roles or unhandled cases (e.g., if 'role' is missing or unknown)
+        // For now, assuming any non-admin/non-dsp also goes to PendingApproval
+        navigation.navigate('PendingApproval');
       }
     } catch (error) {
       handleLoginError(error);
@@ -83,64 +115,65 @@ const Login = () => {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.header}>
-          {/* Using a placeholder for the logo image if actual path is not available or for better visual balance */}
-          <Image
-            source={require('../../assets/logoOnly.png')} // Ensure this path is correct
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.title}>Welcome Back!</Text>
-          <Text style={styles.subtitle}>Sign in to continue to DriverRoom</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.header}>
+            <Image
+              source={require('../../assets/logoOnly.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.subtitle}>Sign in to continue to DriverRoom</Text>
+          </View>
 
-        <View style={styles.formContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email Address"
-            placeholderTextColor="#888"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <View style={styles.formContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email Address"
+              placeholderTextColor="#888"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#888"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#888"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
 
-          <TouchableOpacity
-            style={styles.forgotPasswordButton}
-            onPress={() => navigation.navigate('ForgotPassword')}
-          >
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.loginButton, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginButtonText}>Login</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.loginButton, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.loginButtonText}>Login</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account?</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={styles.footerLink}>Sign up</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account?</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+              <Text style={styles.footerLink}>Sign up</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -149,85 +182,87 @@ const Login = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF', // Clean white background for professionalism
+    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
-    padding: 25, // Increased padding for more breathing room
-    justifyContent: 'space-between', // Distribute space between header, form, and footer
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 25,
   },
   header: {
     alignItems: 'center',
-    marginTop: 60, // Adjusted top margin
+    marginTop: 60,
     marginBottom: 40,
   },
   logo: {
-    width: 150, // Slightly smaller logo for a more refined look
+    width: 150,
     height: 150,
-    marginBottom: 10, // Space between logo and title
+    marginBottom: 10,
     borderRadius: 100,
     resizeMode: 'cover',
   },
   title: {
-    fontSize: 26, // Slightly larger and bolder for impact
-    fontWeight: '700', // Stronger font weight
-    color: '#333333', // Darker text for better contrast and professionalism
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#333333',
     marginTop: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666666', // Softer grey for subtext
+    color: '#666666',
     marginTop: 5,
   },
   formContainer: {
-    flexGrow: 1, // Allows form to take up available space
-    justifyContent: 'center', // Center the form vertically
+    flexGrow: 1,
+    justifyContent: 'center',
     marginBottom: 20,
   },
   input: {
-    height: 55, // Taller inputs for easier tapping
+    height: 55,
     borderWidth: 1,
-    borderColor: '#E0E0E0', // Lighter border color
-    borderRadius: 12, // More rounded corners for a friendly feel
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
     paddingHorizontal: 20,
-    marginBottom: 18, // Increased space between inputs
-    backgroundColor: '#F8F8F8', // Very light grey input background
+    marginBottom: 18,
+    backgroundColor: '#F8F8F8',
     fontSize: 16,
     color: '#333333',
-    shadowColor: '#000', // Subtle shadow for depth
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   loginButton: {
-    height: 55, // Consistent height with inputs
-    backgroundColor: '#6BB9F0', // A more calming and professional blue
-    borderRadius: 12, // Consistent rounded corners
+    height: 55,
+    backgroundColor: '#6BB9F0',
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20, // More space above the button
+    marginTop: 20,
   },
   buttonDisabled: {
-    opacity: 0.6, // Slightly more visible disabled state
+    opacity: 0.6,
   },
   loginButtonText: {
     color: '#fff',
-    fontWeight: '700', // Bold text for emphasis
-    fontSize: 18, // Larger font for readability
+    fontWeight: '700',
+    fontSize: 18,
   },
   forgotPasswordButton: {
-    alignSelf: 'flex-end', // Aligned to the right
-    marginBottom: 20, // Space below button
+    alignSelf: 'flex-end',
+    marginBottom: 20,
   },
   forgotPasswordText: {
-    color: '#6BB9F0', // Matching the primary button color
+    color: '#6BB9F0',
     fontSize: 14,
-    fontWeight: '600', // Slightly bolder
+    fontWeight: '600',
   },
   footer: {
     alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0, // Adjust for iOS bottom safe area
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
   },
   footerText: {
     color: '#666666',
@@ -235,8 +270,8 @@ const styles = StyleSheet.create({
   },
   footerLink: {
     color: '#6BB9F0',
-    fontWeight: '700', // Bolder link
-    marginTop: 8, // More space from the text above
+    fontWeight: '700',
+    marginTop: 8,
     fontSize: 15,
   },
 });
