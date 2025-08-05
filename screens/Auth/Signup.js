@@ -5,7 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert, // Make sure Alert is imported, which it is
+  Alert,
   ScrollView,
   Modal,
   TouchableWithoutFeedback,
@@ -40,10 +40,6 @@ const Signup = ({ navigation }) => {
   const [companies, setCompanies] = useState([]);
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
-  // Jey: Changed role options to 'driver' and 'dispatcher_company'
-  const [role, setRole] = useState('driver'); // Default role
-  // Jey: Added state for Location/Station for Dispatcher/Company
-  const [location, setLocation] = useState('');
   const [profileImage, setProfileImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -118,19 +114,8 @@ const Signup = ({ navigation }) => {
   // Handle form submission and user registration
   const handleSignup = async () => {
     // Basic validation
-    // Jey: Conditional validation based on role
-    if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all required fields (Name, Email, Password).');
-      return;
-    }
-
-    if (role === 'driver' && !selectedCompany) {
-      Alert.alert('Error', 'Please select your company.');
-      return;
-    }
-
-    if (role === 'dispatcher_company' && !location) {
-      Alert.alert('Error', 'Please enter your Location/Station.');
+    if (!name || !email || !password || !confirmPassword || !selectedCompany) {
+      Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
 
@@ -156,47 +141,22 @@ const Signup = ({ navigation }) => {
         imageUrl = await getDownloadURL(storageRef);
       }
 
-      // Jey: Conditionally pass companyName or location based on role
-      const companyInfo = role === 'driver' ? selectedCompany.name : location;
+      const companyInfo = selectedCompany.name;
 
-      // Register the user (this will create an entry in the 'users' collection or similar,
-      // handled by your AuthContext's `register` function)
-      const userCredential = await register(
+      // Register the user as a 'driver'
+      await register(
         email,
         password,
         name.trim(),
-        companyInfo, // This will be company name for driver, or location for dispatcher_company
-        role,
+        companyInfo,
+        'driver', // Hardcoded role
         imageUrl
       );
-
-      // Jey: If the user is a dispatcher_company, create an entry in the 'dsps' collection
-      if (role === 'dispatcher_company') {
-        const dspData = {
-          userId: userCredential.user.uid, // Get the UID from the newly registered user
-          dspName: name.trim(), // The Dispatcher/Company Name entered
-          location: location.trim(),
-          email: email.trim(),
-          profileImageUrl: imageUrl,
-          createdAt: serverTimestamp(),
-          // You might want to add other fields here, like status, active drivers, etc.
-        };
-
-        // Create a new document in the 'dsps' collection.
-        // You can either let Firestore auto-generate an ID (addDoc)
-        // or use the user's UID as the document ID (setDoc with doc()).
-        // Using the UID as the document ID for DSPs is often a good practice
-        // as it provides a direct link back to the user's authentication record.
-        await setDoc(doc(db, 'dsps', userCredential.user.uid), dspData);
-        console.log("Jey: Dispatcher/Company entry created in 'dsps' collection.");
-      }
 
       // Jey: Display success message and navigate
       Alert.alert(
         'Success',
-        role === 'driver'
-          ? 'Account created! Please verify your email and wait for admin approval.'
-          : 'Account created! You can now log in.',
+        'Account created! Please verify your email and wait for admin approval.',
         [{
           text: 'OK',
           onPress: () => {
@@ -289,28 +249,15 @@ const Signup = ({ navigation }) => {
             )}
           </TouchableOpacity>
 
-          {/* Full Name / Dispatcher/Company Name Input */}
+          {/* Full Name Input */}
           <TextInput
             style={styles.input}
-            // Jey: Dynamic placeholder based on role
-            placeholder={role === 'driver' ? 'Full Name' : 'Dispatcher/Company Name'}
+            placeholder='Full Name'
             placeholderTextColor="#888"
             value={name}
             onChangeText={setName}
             autoCapitalize="words"
           />
-
-          {/* Jey: Conditional Location/Station Input for Dispatcher/Company */}
-          {role === 'dispatcher_company' && (
-            <TextInput
-              style={styles.input}
-              placeholder="Location/Station"
-              placeholderTextColor="#888"
-              value={location}
-              onChangeText={setLocation}
-              autoCapitalize="words"
-            />
-          )}
 
           {/* Email Address Input */}
           <TextInput
@@ -344,57 +291,27 @@ const Signup = ({ navigation }) => {
             secureTextEntry
           />
 
-          {/* Jey: Conditional Company Dropdown Selector for Driver Role */}
-          {role === 'driver' && (
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Select Your Company</Text>
-              <TouchableOpacity
-                ref={dropdownRef}
-                onLayout={onDropdownLayout}
-                style={styles.dropdownSelector}
-                onPress={() => setShowCompanyDropdown(true)}
-                disabled={loadingCompanies}
-              >
-                {loadingCompanies ? (
-                  <ActivityIndicator size="small" color="#666" />
-                ) : (
-                  <>
-                    <Text style={selectedCompany ? styles.dropdownText : styles.dropdownPlaceholder}>
-                      {selectedCompany ? selectedCompany.name : 'Choose your company'}
-                    </Text>
-                    <MaterialIcons name="keyboard-arrow-down" size={24} color="#666" />
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Role Selection (Driver/Dsp & Company) */}
+          {/* Company Dropdown Selector for Driver Role */}
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Account Type</Text>
-            <View style={styles.roleContainer}>
-              {/* Jey: Updated role button text and values */}
-              {[
-                { value: 'driver', label: 'Driver' },
-                { value: 'dispatcher_company', label: 'Dsp/ Company' }
-              ].map((r) => (
-                <TouchableOpacity
-                  key={r.value}
-                  style={[
-                    styles.roleButton,
-                    role === r.value && styles.roleButtonActive
-                  ]}
-                  onPress={() => setRole(r.value)}
-                >
-                  <Text style={[
-                    styles.roleButtonText,
-                    role === r.value && styles.roleButtonTextActive
-                  ]}>
-                    {r.label}
+            <Text style={styles.label}>Select Your Company</Text>
+            <TouchableOpacity
+              ref={dropdownRef}
+              onLayout={onDropdownLayout}
+              style={styles.dropdownSelector}
+              onPress={() => setShowCompanyDropdown(true)}
+              disabled={loadingCompanies}
+            >
+              {loadingCompanies ? (
+                <ActivityIndicator size="small" color="#666" />
+              ) : (
+                <>
+                  <Text style={selectedCompany ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {selectedCompany ? selectedCompany.name : 'Choose your company'}
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  <MaterialIcons name="keyboard-arrow-down" size={24} color="#666" />
+                </>
+              )}
+            </TouchableOpacity>
           </View>
 
           {/* Register Button */}
@@ -421,48 +338,46 @@ const Signup = ({ navigation }) => {
           </TouchableOpacity>
         </ScrollView>
 
-        {/* Company Dropdown Modal (only visible if role is driver) */}
-        {role === 'driver' && (
-          <Modal
-            visible={showCompanyDropdown}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => { setShowCompanyDropdown(false); setSearchTerm(''); }}
-          >
-            <TouchableWithoutFeedback onPress={() => { setShowCompanyDropdown(false); setSearchTerm(''); }}>
-              <View style={styles.modalOverlay} />
-            </TouchableWithoutFeedback>
-            <View style={[
-              styles.dropdownModalContent,
-              {
-                top: dropdownPosition.top,
-                left: dropdownPosition.left,
-                width: dropdownPosition.width,
-                maxHeight: Dimensions.get('window').height * 0.4,
+        {/* Company Dropdown Modal */}
+        <Modal
+          visible={showCompanyDropdown}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => { setShowCompanyDropdown(false); setSearchTerm(''); }}
+        >
+          <TouchableWithoutFeedback onPress={() => { setShowCompanyDropdown(false); setSearchTerm(''); }}>
+            <View style={styles.modalOverlay} />
+          </TouchableWithoutFeedback>
+          <View style={[
+            styles.dropdownModalContent,
+            {
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+              maxHeight: Dimensions.get('window').height * 0.4,
+            }
+          ]}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search company..."
+              placeholderTextColor="#999"
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+            <FlatList
+              data={filteredCompanies}
+              renderItem={renderCompanyItem}
+              keyExtractor={item => item.id}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>No companies found.</Text>
               }
-            ]}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search company..."
-                placeholderTextColor="#999"
-                value={searchTerm}
-                onChangeText={setSearchTerm}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
-              <FlatList
-                data={filteredCompanies}
-                renderItem={renderCompanyItem}
-                keyExtractor={item => item.id}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
-                ListEmptyComponent={
-                  <Text style={styles.emptyText}>No companies found.</Text>
-                }
-                keyboardShouldPersistTaps="always"
-              />
-            </View>
-          </Modal>
-        )}
+              keyboardShouldPersistTaps="always"
+            />
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

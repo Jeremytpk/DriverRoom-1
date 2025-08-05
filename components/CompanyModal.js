@@ -29,6 +29,7 @@ const generateId = () => {
 const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [stationLocation, setStationLocation] = useState(''); // Jey: ✨ New state for station/location
   const [loading, setLoading] = useState(false);
 
   // Jey: Populate form with data if in "edit" mode
@@ -36,25 +37,29 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
     if (companyToEdit) {
       setName(companyToEdit.name || '');
       setEmail(companyToEdit.email || '');
+      setStationLocation(companyToEdit.stationLocation || ''); // Jey: ✨ Set station/location on edit
     } else {
       setName('');
       setEmail('');
+      setStationLocation(''); // Jey: ✨ Clear station/location on add
     }
   }, [companyToEdit]);
 
   const handleSave = async () => {
-    if (!name || !email) {
-      Alert.alert("Missing Information", "Please enter a company name and email.");
+    // Jey: Validate all required fields, including the new one
+    if (!name || !email || !stationLocation) {
+      Alert.alert("Missing Information", "Please enter a company name, contact email, and station/location.");
       return;
     }
 
     setLoading(true);
     try {
       if (companyToEdit) {
-        // Jey: Update existing company document
+        // Jey: Update existing company document with the new field
         await updateDoc(doc(db, 'companies', companyToEdit.id), {
           name,
           email,
+          stationLocation, // Jey: ✨ Include new field
         });
         Alert.alert("Success", `Company '${name}' updated successfully!`);
       } else {
@@ -62,19 +67,19 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
         const newCompanyId = generateId();
 
         // Jey: Use setDoc to create the new company document with the custom ID
-        // The DspId field is now included here.
         await setDoc(doc(db, 'companies', newCompanyId), {
           name,
           email,
+          stationLocation, // Jey: ✨ Include new field
           createdAt: new Date(),
           DspId: newCompanyId,
         });
 
         // Jey: Use the same custom ID to create the corresponding user document
-        // The DspId field is also included here for consistency.
         await setDoc(doc(db, 'users', newCompanyId), {
           name,
           email,
+          stationLocation, // Jey: ✨ Include new field
           role: 'company',
           isDsp: false,
           activated: true,
@@ -123,6 +128,14 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
+          />
+          {/* Jey: ✨ New input for Station/Location */}
+          <TextInput
+            style={styles.input}
+            placeholder="Station / Location"
+            placeholderTextColor="#999"
+            value={stationLocation}
+            onChangeText={setStationLocation}
           />
 
           <View style={styles.buttonContainer}>

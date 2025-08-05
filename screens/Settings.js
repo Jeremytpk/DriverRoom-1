@@ -1,4 +1,3 @@
-// Settings.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,12 +81,14 @@ const Settings = () => {
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          {/* Jey: ✨ Added onPress to navigate to ResetPassword */}
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ResetPassword')}>
             <Ionicons name="shield-checkmark-outline" size={24} color={Colors.primaryTeal} />
             <Text style={styles.menuText}>Privacy & Security</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
+          
+          {/*
           <Text style={styles.menuSectionTitle}>Support</Text>
 
           <TouchableOpacity style={styles.menuItem}>
@@ -95,7 +96,8 @@ const Settings = () => {
             <Text style={styles.menuText}>Help & Support</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
+          */}
+          
           {/* Logout Button - Visually distinct */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={24} color={Colors.redAccent} />
@@ -224,6 +226,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   logoutButton: {
+    marginTop: 50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

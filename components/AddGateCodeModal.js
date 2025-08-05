@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
   },
   defaultImage: {
-    width: 150,
+    width: 200,
     height: 80,
     resizeMode: 'contain',
     tintColor: '#a0a0a0',

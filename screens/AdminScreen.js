@@ -336,13 +336,18 @@ const AdminScreen = ({ navigation }) => {
       case 'companies':
         return (
           <View style={styles.tabContentContainer}>
-            <TextInput
-              style={styles.searchBar}
-              placeholder="Search companies..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#999"
-            />
+            {/* Jey: Container for search and count */}
+            <View style={styles.searchAndCountContainer}>
+              <TextInput
+                style={styles.searchBar}
+                placeholder="Search companies..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.countText}>Total: {filteredCompanies.length}</Text>
+            </View>
+
             <TouchableOpacity
               style={styles.addCompanyButton}
               onPress={() => handleOpenCompanyModal()}
@@ -356,25 +361,31 @@ const AdminScreen = ({ navigation }) => {
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContentContainer}
               ListEmptyComponent={<Text style={styles.emptyListText}>No companies found.</Text>}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
             />
           </View>
         );
       case 'drivers':
         return (
           <View style={styles.tabContentContainer}>
-            <TextInput
-              style={styles.searchBar}
-              placeholder="Search drivers or DSPs..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#999"
-            />
+            {/* Jey: Container for search and count */}
+            <View style={styles.searchAndCountContainer}>
+              <TextInput
+                style={styles.searchBar}
+                placeholder="Search drivers or DSPs..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#999"
+              />
+              <Text style={styles.countText}>Total: {filteredDrivers.length}</Text>
+            </View>
             <FlatList
               data={filteredDrivers}
               renderItem={renderDriverItem}
               keyExtractor={item => item.id}
               contentContainerStyle={styles.listContentContainer}
               ListEmptyComponent={<Text style={styles.emptyListText}>No drivers found.</Text>}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
             />
           </View>
         );
@@ -544,16 +555,29 @@ const styles = StyleSheet.create({
   tabContentContainer: {
     flex: 1,
   },
+  // Jey: ✨ New style for the search and count container
+  searchAndCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
   searchBar: {
+    flex: 1,
     height: 45,
     borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 15,
     fontSize: 16,
-    marginBottom: 15,
     backgroundColor: '#f1f1f1',
     color: '#333',
+    marginRight: 10,
+  },
+  // Jey: ✨ New style for the count text
+  countText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6BB9F0',
   },
   addCompanyButton: {
     flexDirection: 'row',

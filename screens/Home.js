@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   ScrollView, Dimensions, Modal, Platform, RefreshControl, Alert
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Jey: Keep MaterialIcons for Admin/Company tabs
 import { createStackNavigator } from '@react-navigation/stack';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -42,16 +42,18 @@ const DriverProfileHeader = ({ userData }) => (
         <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
-          <Ionicons name="person" size={30} color={Colors.white} />
+          {/* Jey: Replaced Ionicons with profile.png */}
+          <Image source={require('../assets/png/profile.png')} style={[styles.profilePng, { tintColor: Colors.white }]} />
         </View>
       )}
     </View>
     <Text style={styles.profileName}>{userData?.name || 'Driver'}</Text>
     {userData?.role === 'driver' && (
       <View style={styles.driverInfo}>
+        {/* Jey: Replaced driver.png with business_outline.png */}
         <Image
-          source={require('../assets/driver.png')}
-          style={styles.driverIcon}
+          source={require('../assets/png/business_outline.png')}
+          style={[styles.businessOutlinePng, { tintColor: Colors.mediumText }]}
         />
         <Text style={styles.dspName}>{userData?.dspName || 'Your DSP'}</Text>
       </View>
@@ -356,7 +358,11 @@ const HomeScreen = ({ navigation }) => {
           notices.map((notice, index) => (
             <View key={notice.id} style={styles.noticeCard}>
               <View style={styles.noticeHeader}>
-                <MaterialIcons name="announcement" size={24} color={Colors.white} />
+                {/* Jey: Replaced Ionicons with Image for notices, tinted white for visibility on orange background */}
+                <Image
+                  source={require('../assets/png/infos.png')}
+                  style={[styles.iconPng, { tintColor: Colors.white }]}
+                />
                 <Text style={styles.noticeTitle}>{notice.title}</Text>
               </View>
               <Text style={styles.noticeMessage}>{notice.message}</Text>
@@ -364,8 +370,13 @@ const HomeScreen = ({ navigation }) => {
             </View>
           ))
         ) : (
+          // Jey: ✨ Conditionally render this block only if notices.length is 0
           <View style={styles.noticesCardNoNotices}>
-            <Ionicons name="megaphone-outline" size={50} color={Colors.inactiveGray} />
+            {/* Jey: Replaced Ionicons with Image for no notices, tinted inactiveGray */}
+            <Image
+              source={require('../assets/png/infos.png')}
+              style={[styles.iconPng, { tintColor: Colors.inactiveGray }]}
+            />
             <Text style={styles.noNoticesText}>No new notices from your DSP.</Text>
           </View>
         )}
@@ -376,7 +387,11 @@ const HomeScreen = ({ navigation }) => {
               style={styles.button}
               onPress={() => navigation.navigate('GroupChat')}
             >
-              <Ionicons name="people-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
+              {/* Jey: Replaced Ionicons with Image for Group Chats, tinted primaryTeal */}
+              <Image
+                source={require('../assets/png/users.png')}
+                style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
+              />
               <Text style={styles.buttonText}>Group Chats</Text>
               {unreadCounts.group > 0 ? (
                 <View style={styles.badge}>
@@ -391,7 +406,11 @@ const HomeScreen = ({ navigation }) => {
               style={styles.button}
               onPress={() => navigation.navigate('OneChat')}
             >
-              <Ionicons name="person-outline" size={24} color={Colors.primaryTeal} style={styles.buttonIcon} />
+              {/* Jey: Replaced Ionicons with Image for Direct Messages, tinted primaryTeal */}
+              <Image
+                source={require('../assets/png/user.png')}
+                style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
+              />
               <Text style={styles.buttonText}>Direct Messages</Text>
               {unreadCounts.one > 0 ? (
                 <View style={styles.badge}>
@@ -409,7 +428,11 @@ const HomeScreen = ({ navigation }) => {
             style={[styles.button, styles.importantButton]}
             onPress={() => navigation.navigate('GateCodes')}
           >
-            <Ionicons name="key-outline" size={24} color={Colors.white} style={styles.buttonIcon} />
+            {/* Jey: Replaced Ionicons with Image for Gate Codes, tinted white */}
+            <Image
+              source={require('../assets/png/key.png')}
+              style={[styles.iconPng, { tintColor: Colors.white }]}
+            />
             <Text style={[styles.buttonText, styles.importantButtonText]}>Gate Codes</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.white} />
           </TouchableOpacity>
@@ -422,10 +445,13 @@ const HomeScreen = ({ navigation }) => {
           style={styles.toggleButton}
           onPress={() => handleTabPress('HomeTab')}
         >
-          <Ionicons
-            name="home-outline"
-            size={20}
-            color={activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray}
+          {/* Jey: Replaced Ionicons with Image for Home tab, tinted dynamically */}
+          <Image
+            source={require('../assets/png/home.png')}
+            style={[
+              styles.bottomTabIconPng,
+              { tintColor: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
+            ]}
           />
           <Text
             style={[
@@ -442,10 +468,13 @@ const HomeScreen = ({ navigation }) => {
             style={styles.toggleButton}
             onPress={() => handleTabPress('PostsTab')}
           >
-            <Ionicons
-              name="chatbox-ellipses-outline"
-              size={20}
-              color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
+            {/* Jey: Replaced Ionicons with Image for Posts tab, tinted dynamically */}
+            <Image
+              source={require('../assets/png/post.png')}
+              style={[
+                styles.bottomTabIconPng,
+                { tintColor: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+              ]}
             />
             <Text
             style={[
@@ -463,6 +492,7 @@ const HomeScreen = ({ navigation }) => {
             style={styles.toggleButton}
             onPress={() => handleTabPress('AdminTab')}
           >
+            {/* Jey: Keeping MaterialIcons as no PNG was provided */}
             <MaterialIcons
               name="admin-panel-settings"
               size={20}
@@ -484,6 +514,7 @@ const HomeScreen = ({ navigation }) => {
             style={styles.toggleButton}
             onPress={() => handleTabPress('CompanyTab')}
           >
+            {/* Jey: Keeping MaterialIcons as no PNG was provided */}
             <MaterialIcons
               name="business"
               size={20}
@@ -504,10 +535,13 @@ const HomeScreen = ({ navigation }) => {
           style={styles.toggleButton}
           onPress={() => handleTabPress('SettingsTab')}
         >
-          <Ionicons
-            name="settings-outline"
-            size={20}
-            color={activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray}
+          {/* Jey: Replaced Ionicons with Image for Settings tab, tinted dynamically */}
+          <Image
+            source={require('../assets/png/settings.png')}
+            style={[
+              styles.bottomTabIconPng,
+              { tintColor: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+            ]}
           />
           <Text
             style={[
@@ -654,7 +688,7 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 1 minute has passed. Setting driver to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 60000);
+          }, 600000);
         } else {
           // Jey: If the driver is off-duty, clear the timer just in case
           if (fixedTimerRef.current) {
@@ -823,6 +857,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Jey: New style for profile.png
+  profilePng: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
   profileName: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -833,7 +873,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  driverIcon: {
+  // Jey: New style for business_outline.png
+  businessOutlinePng: {
     width: 20,
     height: 20,
     marginRight: 8,
@@ -1040,8 +1081,12 @@ const styles = StyleSheet.create({
   importantButtonText: {
     color: Colors.white,
   },
-  buttonIcon: {
+  // Jey: ✨ New style for PNG icons in buttons
+  iconPng: {
+    width: 24,
+    height: 24,
     marginRight: 15,
+    resizeMode: 'contain',
   },
   buttonText: {
     flex: 1,
@@ -1094,6 +1139,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     marginHorizontal: 0,
+  },
+  // Jey: ✨ New style for PNG icons in bottom tabs
+  bottomTabIconPng: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
   },
   toggleButtonText: {
     fontSize: 12,

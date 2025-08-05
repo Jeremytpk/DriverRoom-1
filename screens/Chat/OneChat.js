@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert } from 'react-native'; // Added Alert
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, getDocs, addDoc, getFirestore, deleteDoc, doc } from 'firebase/firestore'; // Added deleteDoc, doc
+import { collection, query, where, onSnapshot, getDocs, addDoc, getFirestore, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import { Swipeable } from 'react-native-gesture-handler'; // Import Swipeable
-import { RectButton } from 'react-native-gesture-handler'; // Import RectButton for swipe actions
+import { Swipeable } from 'react-native-gesture-handler';
+import { RectButton } from 'react-native-gesture-handler';
 
 // Define your color palette (consistent with HomeScreen)
 const Colors = {
@@ -15,12 +15,12 @@ const Colors = {
   white: '#FFFFFF',
   darkText: '#333333',
   mediumText: '#666666',
-  borderColor: '#ddd', // Added for modal styles
-  dangerRed: '#DC3545', // Added for delete button
+  borderColor: '#ddd',
+  dangerRed: '#DC3545',
 };
 
 // StartNewOneChatModal component moved inside OneChat.js for direct integration
-const StartNewOneChatModal = ({ visible, onClose, navigation, currentUserEmail, currentUserName }) => {
+const StartNewOneChatModal = ({ visible, onClose, navigation, currentUserEmail, currentUserName, currentUserDspName }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [allUsers, setAllUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -33,10 +33,11 @@ const StartNewOneChatModal = ({ visible, onClose, navigation, currentUserEmail, 
         setLoadingUsers(true);
         try {
           const usersCollectionRef = collection(db, 'users');
-          // Fetch only activated users. We will filter out the current user client-side.
+          // Fetch only activated users and those with the same dspName
           const q = query(
             usersCollectionRef,
-            where('activated', '==', true) // Simplified query to avoid composite index
+            where('activated', '==', true),
+            where('dspName', '==', currentUserDspName) // Filter by the current user's DSP
           );
           const querySnapshot = await getDocs(q);
           let usersData = querySnapshot.docs.map(doc => ({
@@ -61,7 +62,7 @@ const StartNewOneChatModal = ({ visible, onClose, navigation, currentUserEmail, 
       setSearchQuery('');
       setFilteredUsers(allUsers); // Reset filtered users to all users for next open
     }
-  }, [visible, currentUserEmail, allUsers.length]);
+  }, [visible, currentUserEmail, currentUserDspName, allUsers.length]); // Added currentUserDspName to the dependency array
 
   useEffect(() => {
     // Filter users based on search query
@@ -305,7 +306,7 @@ const OneChat = ({ navigation }) => {
         <View style={styles.emptyContainer}>
           <Ionicons name="chatbubbles-outline" size={50} color={Colors.primaryTeal} />
           <Text style={styles.emptyText}>No direct messages yet</Text>
-          <Text style={styles.emptySubtext}>Start a new chat with another driver</Text>
+          <Text style={styles.emptySubtext}>Start a new chat with a teammate</Text>
         </View>
       ) : (
         <FlatList
@@ -358,6 +359,7 @@ const OneChat = ({ navigation }) => {
         currentUserEmail={userData?.email}
         currentUserId={userData?.id}
         currentUserName={userData?.name}
+        currentUserDspName={userData?.dspName} // <-- ADDED THIS PROP
       />
     </View>
   );

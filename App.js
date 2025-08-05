@@ -31,6 +31,8 @@ import OneChat from './screens/Chat/OneChat';
 import OnDutty from './screens/OnDutty';
 import OffDutty from './screens/OffDutty';
 import AdminScreen from './screens/AdminScreen';
+import ResetPassword from './screens/ResetPassword';
+import PasswordResetConfirmation from './screens/PasswordResetConfirmation';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -184,6 +186,16 @@ export default function App() {
             <Stack.Screen
               name="Signup"
               component={Signup}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ResetPassword"
+              component={ResetPassword}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="PasswordResetConfirmation"
+              component={PasswordResetConfirmation}
               options={{ headerShown: false }}
             />
             <Stack.Screen
