@@ -1,9 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons'; // Still keep Ionicons if you use it elsewhere or for other icons not specified
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+
+// Jey: Import your local image assets
+import profilePlaceholderIcon from '../assets/png/profile.png'; // For avatar placeholder
+import cameraIcon from '../assets/png/camera.png'; // For edit avatar icon
+import userIcon from '../assets/png/user.png'; // For Edit Profile menu item
+import lockIcon from '../assets/png/lock.png'; // For Privacy & Security menu item
+import logoutIcon from '../assets/png/logout.png'; // For Logout button
 
 const Colors = {
   primaryTeal: '#007070',
@@ -49,11 +56,13 @@ const Settings = () => {
               <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Ionicons name="person" size={50} color={Colors.white} />
+                {/* Jey: Replaced Ionicons with custom profile placeholder image */}
+                <Image source={profilePlaceholderIcon} style={styles.profilePlaceholderImage} />
               </View>
             )}
             <View style={styles.editAvatarIcon}>
-              <Ionicons name="camera-outline" size={20} color={Colors.white} />
+              {/* Jey: Replaced Ionicons with custom camera icon */}
+              <Image source={cameraIcon} style={styles.cameraImage} />
             </View>
           </TouchableOpacity>
           <Text style={styles.name}>{userData?.name || 'User Name'}</Text>
@@ -70,42 +79,35 @@ const Settings = () => {
           <Text style={styles.menuSectionTitle}>General</Text>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
-            <Ionicons name="person-outline" size={24} color={Colors.primaryTeal} />
+            {/* Jey: Replaced Ionicons with custom user icon */}
+            <Image source={userIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
+          
+          {/*
           <TouchableOpacity style={styles.menuItem}>
             <Ionicons name="notifications-outline" size={24} color={Colors.primaryTeal} />
             <Text style={styles.menuText}>Notifications</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
+          */}
 
-          {/* Jey: ✨ Added onPress to navigate to ResetPassword */}
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ResetPassword')}>
-            <Ionicons name="shield-checkmark-outline" size={24} color={Colors.primaryTeal} />
+            {/* Jey: Replaced Ionicons with custom lock icon */}
+            <Image source={lockIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Privacy & Security</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-          
-          {/*
-          <Text style={styles.menuSectionTitle}>Support</Text>
 
-          <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="help-circle-outline" size={24} color={Colors.primaryTeal} />
-            <Text style={styles.menuText}>Help & Support</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
-          </TouchableOpacity>
-          */}
-          
           {/* Logout Button - Visually distinct */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color={Colors.redAccent} />
+            {/* Jey: Replaced Ionicons with custom logout icon */}
+            <Image source={logoutIcon} style={styles.logoutIcon} />
             <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
-      {/* Jey: The custom toggleButtonContainer has been removed entirely */}
     </View>
   );
 };
@@ -151,6 +153,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  // Jey: Style for the profile placeholder image
+  profilePlaceholderImage: {
+    width: 80, // Adjust size as needed
+    height: 80, // Adjust size as needed
+    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
+  },
   editAvatarIcon: {
     position: 'absolute',
     bottom: 0,
@@ -160,6 +168,12 @@ const styles = StyleSheet.create({
     padding: 5,
     borderWidth: 2,
     borderColor: Colors.white,
+  },
+  // Jey: Style for the camera image
+  cameraImage: {
+    width: 20, // Adjust size as needed
+    height: 20, // Adjust size as needed
+    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
   },
   name: {
     fontSize: 24,
@@ -216,6 +230,12 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     backgroundColor: Colors.white,
   },
+  // Jey: Style for menu item icons
+  menuItemIcon: {
+    width: 24, // Match Ionicons size
+    height: 24, // Match Ionicons size
+    tintColor: Colors.primaryTeal, // Apply tint if your PNG is a monochrome icon
+  },
   menuText: {
     marginLeft: 15,
     fontSize: 17,
@@ -234,6 +254,12 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
+  },
+  // Jey: Style for the logout icon
+  logoutIcon: {
+    width: 24, // Match Ionicons size
+    height: 24, // Match Ionicons size
+    tintColor: Colors.redAccent, // Apply tint if your PNG is a monochrome icon
   },
   logoutButtonText: {
     marginLeft: 10,

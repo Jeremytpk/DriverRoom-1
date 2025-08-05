@@ -10,15 +10,19 @@ import {
   ScrollView,
   Modal,
   Platform,
-  KeyboardAvoidingView, // Import KeyboardAvoidingView
+  KeyboardAvoidingView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons'; // Keep Ionicons if used elsewhere
 import * as ImagePicker from 'expo-image-picker';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase'; // Assuming db and storage are exported from firebase.js
+import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+
+// Jey: Import your local image assets
+import profilePlaceholderIcon from '../assets/png/profile.png'; // For avatar placeholder
+import cameraIcon from '../assets/png/camera.png'; // For camera icon
 
 // Centralized Color Palette (assuming it's consistent across your app)
 const Colors = {
@@ -35,33 +39,28 @@ const Colors = {
 };
 
 const EditProfile = () => {
-  const { userData, updateUserProfile } = useAuth(); // Get user data and update function from AuthContext
+  const { userData, updateUserProfile } = useAuth();
   const navigation = useNavigation();
 
-  // State for form fields
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
-  // Add state for email
   const [email, setEmail] = useState('');
-  const [profilePictureUrl, setProfilePictureUrl] = useState(null); // Current URL from Firestore
-  const [newProfilePictureUri, setNewProfilePictureUri] = useState(null); // URI of newly picked image
+  const [profilePictureUrl, setProfilePictureUrl] = useState(null);
+  const [newProfilePictureUri, setNewProfilePictureUri] = useState(null);
 
-  // State for UI feedback
   const [uploading, setUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    // Populate form fields with current user data on component mount
     if (userData) {
       setName(userData.name || '');
       setBio(userData.bio || '');
-      setEmail(userData.email || ''); // Populate email from userData
+      setEmail(userData.email || '');
       setProfilePictureUrl(userData.profilePictureUrl || null);
     }
 
-    // Request media library permissions
     (async () => {
       if (Platform.OS !== 'web') {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -70,15 +69,15 @@ const EditProfile = () => {
         }
       }
     })();
-  }, [userData]); // Re-run if userData changes (e.g., after initial load)
+  }, [userData]);
 
   const handleImagePick = async () => {
     try {
       let result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [1, 1], // Square aspect ratio for profile pictures
-        quality: 0.7, // Reduce quality for faster upload
+        aspect: [1, 1],
+        quality: 0.7,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -96,16 +95,16 @@ const EditProfile = () => {
 
     try {
       const response = await fetch(uri);
-      const blob = await response.blob(); // Convert image URI to blob
+      const blob = await response.blob();
 
       const storageRef = ref(storage, `profile_pictures/${userId}/${Date.now()}_profile.jpg`);
-      await uploadBytes(storageRef, blob); // Upload blob to Firebase Storage
-      const downloadURL = await getDownloadURL(storageRef); // Get the public URL
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
 
       return downloadURL;
     } catch (error) {
       console.error('Jey: Error uploading image to Firebase Storage:', error);
-      throw new Error('Failed to upload profile picture.'); // Re-throw to be caught by handleSaveProfile
+      throw new Error('Failed to upload profile picture.');
     }
   };
 
@@ -116,37 +115,33 @@ const EditProfile = () => {
       return;
     }
 
-    setUploading(true); // Start loading indicator
+    setUploading(true);
 
     try {
       let updatedProfilePictureUrl = profilePictureUrl;
 
-      // 1. Upload new profile picture if selected
       if (newProfilePictureUri) {
         updatedProfilePictureUrl = await uploadImageToFirebase(newProfilePictureUri, userData.uid);
       }
 
-      // 2. Update user document in Firestore
       const userDocRef = doc(db, 'users', userData.uid);
       await updateDoc(userDocRef, {
-        name: name.trim(), // Trim whitespace
+        name: name.trim(),
         bio: bio.trim(),
-        email: email.trim(), // Save updated email
+        email: email.trim(),
         profilePictureUrl: updatedProfilePictureUrl,
-        updatedAt: new Date(), // Add an update timestamp
+        updatedAt: new Date(),
       });
 
-      // 3. Update local user context
       updateUserProfile({
         ...userData,
         name: name.trim(),
         bio: bio.trim(),
-        email: email.trim(), // Update email in context
+        email: email.trim(),
         profilePictureUrl: updatedProfilePictureUrl,
       });
 
-      setShowSuccessModal(true); // Show success message
-      // Optionally navigate back after a short delay
+      setShowSuccessModal(true);
       setTimeout(() => {
         setShowSuccessModal(false);
         navigation.goBack();
@@ -157,7 +152,7 @@ const EditProfile = () => {
       setErrorMessage(error.message || 'Failed to save profile. Please try again.');
       setShowErrorModal(true);
     } finally {
-      setUploading(false); // Stop loading indicator
+      setUploading(false);
     }
   };
 
@@ -165,12 +160,11 @@ const EditProfile = () => {
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20} // Adjust as needed
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 20}
     >
       <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
         <Text style={styles.header}>Edit Your Profile</Text>
 
-        {/* New Wrapper View for positioning */}
         <View style={styles.profileImageWrapper}>
           <TouchableOpacity style={styles.profilePictureContainer} onPress={handleImagePick}>
             {newProfilePictureUri ? (
@@ -179,13 +173,14 @@ const EditProfile = () => {
               <Image source={{ uri: profilePictureUrl }} style={styles.profilePicture} />
             ) : (
               <View style={[styles.profilePicture, styles.profilePicturePlaceholder]}>
-                <Ionicons name="person" size={60} color={Colors.white} />
+                {/* Jey: Replaced Ionicons with custom profile placeholder image */}
+                <Image source={profilePlaceholderIcon} style={styles.profilePlaceholderImage} />
               </View>
             )}
           </TouchableOpacity>
-          {/* Camera icon is now a sibling, but absolutely positioned relative to the wrapper */}
           <TouchableOpacity style={styles.cameraIconContainer} onPress={handleImagePick}>
-              <Ionicons name="camera" size={24} color={Colors.white} />
+              {/* Jey: Replaced Ionicons with custom camera icon */}
+              <Image source={cameraIcon} style={styles.cameraImage} />
           </TouchableOpacity>
         </View>
 
@@ -202,7 +197,6 @@ const EditProfile = () => {
           />
         </View>
 
-        {/* New Email Input Field */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -211,9 +205,9 @@ const EditProfile = () => {
             placeholderTextColor={Colors.inactiveGray}
             value={email}
             onChangeText={setEmail}
-            keyboardType="email-address" // Hint for email keyboard
-            autoCapitalize="none" // Don't auto-capitalize emails
-            autoCorrect={false} // Don't auto-correct emails
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
         </View>
 
@@ -233,7 +227,7 @@ const EditProfile = () => {
         <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSaveProfile}
-          disabled={uploading} // Disable button during upload/save
+          disabled={uploading}
         >
           {uploading ? (
             <ActivityIndicator color={Colors.white} />
@@ -305,8 +299,7 @@ const styles = StyleSheet.create({
     height: 120,
     marginBottom: 10,
     position: 'relative',
-    // --- New styles for centering the avatar within the wrapper ---
-    alignSelf: 'center', // Centers the wrapper itself
+    alignSelf: 'center',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -329,10 +322,17 @@ const styles = StyleSheet.create({
   },
   profilePicturePlaceholder: {
     backgroundColor: Colors.primaryTeal,
-    width: 150,
-    height: 150,
+    width: 150, // This width/height is for the *View* that contains the image
+    height: 150, // This width/height is for the *View* that contains the image
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Jey: Style for the profile placeholder image
+  profilePlaceholderImage: {
+    width: 80, // Adjust size as needed to fit well within the 120x120 container
+    height: 80, // Adjust size as needed
+    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
+    resizeMode: 'contain', // Ensure the image fits without cropping
   },
   cameraIconContainer: {
     position: 'absolute',
@@ -346,6 +346,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: Colors.white,
+  },
+  // Jey: Style for the camera image
+  cameraImage: {
+    width: 24, // Match Ionicons size
+    height: 24, // Match Ionicons size
+    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
+    resizeMode: 'contain',
   },
   hintText: {
     fontSize: 14,

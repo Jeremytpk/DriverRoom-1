@@ -10,18 +10,21 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { doc, getDoc } from 'firebase/firestore'; // Jey: Import Firestore functions
-import { onAuthStateChanged } from 'firebase/auth'; // Jey: Import onAuthStateChanged
-import { auth, db } from '../firebase'; // Jey: Assuming 'auth' and 'db' are exported from your firebase.js
+import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, db } from '../firebase';
+
+// Jey: Import your local image assets
+import lockIcon from '../assets/png/lock.png';
+import refreshIcon from '../assets/png/refresh.png';
 
 const OffDutty = () => {
     const navigation = useNavigation();
-    const [isOnDutyStatus, setIsOnDutyStatus] = useState(false); // Jey: Local state for on-duty status
-    const [loadingStatus, setLoadingStatus] = useState(true); // Jey: Loading state for this component's data fetch
+    const [isOnDutyStatus, setIsOnDutyStatus] = useState(false);
+    const [loadingStatus, setLoadingStatus] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [currentUserId, setCurrentUserId] = useState(null); // Jey: To store the current user's UID
+    const [currentUserId, setCurrentUserId] = useState(null);
 
-    // Jey: Function to check the isOnDutty status directly from Firestore
     const checkOnDutyStatus = async (uid) => {
         if (!uid) {
             setLoadingStatus(false);
@@ -36,46 +39,42 @@ const OffDutty = () => {
                 setIsOnDutyStatus(userDataFromFirestore.isOnDutty || false);
             } else {
                 console.log("Jey: User document not found for UID:", uid);
-                setIsOnDutyStatus(false); // Assume off-duty if document doesn't exist
+                setIsOnDutyStatus(false);
             }
         } catch (error) {
             console.error('Jey: Error fetching isOnDutty status:', error);
             Alert.alert('Error', 'Failed to load status. Please try again.');
-            setIsOnDutyStatus(false); // Assume off-duty on error
+            setIsOnDutyStatus(false);
         } finally {
             setLoadingStatus(false);
         }
     };
 
-    // Jey: Effect to listen for auth state changes and get the user ID
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
                 setCurrentUserId(user.uid);
             } else {
                 setCurrentUserId(null);
-                setIsOnDutyStatus(false); // Jey: If no user, definitely off-duty
+                setIsOnDutyStatus(false);
                 setLoadingStatus(false);
             }
         });
         return () => unsubscribe();
     }, []);
 
-    // Jey: Effect to check status when currentUserId changes
     useEffect(() => {
         if (currentUserId) {
             checkOnDutyStatus(currentUserId);
         }
-    }, [currentUserId]); // Jey: Re-run when currentUserId changes
+    }, [currentUserId]);
 
-    // Jey: This effect will automatically navigate the user if their status changes
     useEffect(() => {
         if (isOnDutyStatus) {
             navigation.navigate('Home');
         }
     }, [isOnDutyStatus, navigation]);
 
-    // Jey: Handler for the refresh button
     const handleRefresh = async () => {
         if (!currentUserId) {
             Alert.alert("Error", "User not logged in. Cannot refresh status.");
@@ -100,13 +99,14 @@ const OffDutty = () => {
                 resizeMode="contain"
             />
             <View style={styles.contentContainer}>
-                <Ionicons name="lock-closed-outline" size={60} color="#FF9AA2" style={styles.lockIcon} />
+                {/* Jey: Replaced Ionicons with Image component */}
+                <Image source={lockIcon} style={styles.customLockIcon} />
                 <Text style={styles.title}>You are Off-Duty</Text>
                 <Text style={styles.message}>
                     Your account is currently off-duty.
                 </Text>
                 <Text style={styles.message}>Enjoy your day off.</Text>
-                {loadingStatus && ( // Jey: Use local loadingStatus here
+                {loadingStatus && (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#6BB9F0" />
                         <Text style={styles.loadingText}>Checking status...</Text>
@@ -116,13 +116,14 @@ const OffDutty = () => {
             <TouchableOpacity
                 style={styles.refreshButton}
                 onPress={handleRefresh}
-                disabled={isRefreshing || loadingStatus} // Jey: Disable if already refreshing or loading
+                disabled={isRefreshing || loadingStatus}
             >
                 {isRefreshing ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                     <>
-                        <Ionicons name="refresh-outline" size={20} color="#FFFFFF" style={styles.refreshIcon} />
+                        {/* Jey: Replaced Ionicons with Image component */}
+                        <Image source={refreshIcon} style={styles.customRefreshIcon} />
                         <Text style={styles.refreshButtonText}>Refresh Status</Text>
                     </>
                 )}
@@ -155,8 +156,12 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 5,
     },
-    lockIcon: {
+    // Jey: New style for the custom lock image
+    customLockIcon: {
+        width: 60,
+        height: 60,
         marginBottom: 15,
+        tintColor: '#FF9AA2', // You can apply a tint color to the PNG if needed
     },
     title: {
         fontSize: 24,
@@ -200,7 +205,12 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 8,
     },
-    refreshIcon: {},
+    // Jey: New style for the custom refresh image
+    customRefreshIcon: {
+        width: 20,
+        height: 20,
+        tintColor: '#FFFFFF',
+    },
 });
 
 export default OffDutty;
