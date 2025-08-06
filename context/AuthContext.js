@@ -107,51 +107,75 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const chatsQuery = query(
+    // Jey: Create separate queries for group and one-to-one chats
+    const groupChatsQuery = query(
       collection(db, 'chats'),
-      where('participants', 'array-contains', userData.email)
+      where('participants', 'array-contains', userData.email),
+      where('isGroup', '==', true) // Filter for group chats
     );
 
-    const unsubscribeChats = onSnapshot(chatsQuery, async (chatsSnapshot) => {
-      let totalUnreadGroup = 0;
-      let totalUnreadOne = 0;
+    const oneChatsQuery = query(
+      collection(db, 'chats'),
+      where('participants', 'array-contains', userData.email),
+      where('isGroup', '==', false) // Filter for one-to-one chats
+    );
 
-      const chatProcessingPromises = chatsSnapshot.docs.map(async (chatDoc) => {
+    const unsubscribeGroupChats = onSnapshot(groupChatsQuery, async (groupChatsSnapshot) => {
+      let totalUnreadGroup = 0;
+      const chatProcessingPromises = groupChatsSnapshot.docs.map(async (chatDoc) => {
         const chatData = chatDoc.data();
         const chatId = chatDoc.id;
         const lastMessageTimestamp = chatData.lastMessage?.createdAt?.toDate();
 
-        if (!lastMessageTimestamp) {
-          return;
-        }
+        if (!lastMessageTimestamp) return;
 
         const userChatDocRef = doc(db, 'userChats', userData.uid, 'chats', chatId);
         const userChatSnap = await getDoc(userChatDocRef);
 
-        let lastReadTimestamp = null;
-        if (userChatSnap.exists()) {
-          lastReadTimestamp = userChatSnap.data().lastReadMessageTimestamp?.toDate();
-        }
+        let lastReadTimestamp = userChatSnap.exists() ? userChatSnap.data().lastReadMessageTimestamp?.toDate() : null;
 
         if ((!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp) && chatData.lastMessage.sender !== userData.email) {
-          if (chatData.isGroup) {
-            totalUnreadGroup += 1;
-          } else {
-            totalUnreadOne += 1;
-          }
+          totalUnreadGroup += 1;
         }
       });
 
       await Promise.all(chatProcessingPromises);
-      setUnreadCounts({ group: totalUnreadGroup, one: totalUnreadOne });
+      setUnreadCounts(prev => ({ ...prev, group: totalUnreadGroup }));
     }, (error) => {
-      console.error("Jey: Error listening to chats for unread count:", error);
+      console.error("Jey: Error listening to group chats:", error);
     });
 
-    return () => unsubscribeChats();
+    const unsubscribeOneChats = onSnapshot(oneChatsQuery, async (oneChatsSnapshot) => {
+      let totalUnreadOne = 0;
+      const chatProcessingPromises = oneChatsSnapshot.docs.map(async (chatDoc) => {
+        const chatData = chatDoc.data();
+        const chatId = chatDoc.id;
+        const lastMessageTimestamp = chatData.lastMessage?.createdAt?.toDate();
+
+        if (!lastMessageTimestamp) return;
+
+        const userChatDocRef = doc(db, 'userChats', userData.uid, 'chats', chatId);
+        const userChatSnap = await getDoc(userChatDocRef);
+
+        let lastReadTimestamp = userChatSnap.exists() ? userChatSnap.data().lastReadMessageTimestamp?.toDate() : null;
+
+        if ((!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp) && chatData.lastMessage.sender !== userData.email) {
+          totalUnreadOne += 1;
+        }
+      });
+
+      await Promise.all(chatProcessingPromises);
+      setUnreadCounts(prev => ({ ...prev, one: totalUnreadOne }));
+    }, (error) => {
+      console.error("Jey: Error listening to one-to-one chats:", error);
+    });
+
+    return () => {
+      unsubscribeGroupChats();
+      unsubscribeOneChats();
+    };
   }, [userData, db]);
 
-  // Jey: This is the corrected 'value' object
   const value = {
     currentUser,
     userData,
@@ -161,7 +185,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateUserProfile,
     unreadCounts,
-    setUserData // <-- Jey: Added setUserData here
+    setUserData
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -684,11 +684,11 @@ const HomeWrapper = () => {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
           }
-          // Jey: Set a new timer for 1 minute (60,000 milliseconds)
+// Jey: Set a new timer for 1 minute (60,000 milliseconds)
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 1 minute has passed. Setting driver to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 600000);
+          }, 6000);
         } else {
           // Jey: If the driver is off-duty, clear the timer just in case
           if (fixedTimerRef.current) {
