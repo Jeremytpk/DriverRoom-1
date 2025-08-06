@@ -11,12 +11,13 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth'; // Jey: Import signOut
 import { auth, db } from '../firebase';
 
 // Jey: Import your local image assets
 import lockIcon from '../assets/png/lock.png';
 import refreshIcon from '../assets/png/refresh.png';
+import logoutIcon from '../assets/png/logout.png'; // Jey: Import logout icon
 
 const OffDutty = () => {
     const navigation = useNavigation();
@@ -91,6 +92,21 @@ const OffDutty = () => {
         }
     };
 
+    // Jey: New handleLogout function
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            console.log("Jey: User logged out from OffDutty screen.");
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }], // Navigate to your Login screen
+            });
+        } catch (error) {
+            console.error('Jey: Logout error from OffDutty screen:', error);
+            Alert.alert("Logout Failed", "Could not log out. Please try again.");
+        }
+    };
+
     return (
         <View style={styles.container}>
             <Image
@@ -128,6 +144,15 @@ const OffDutty = () => {
                     </>
                 )}
             </TouchableOpacity>
+
+            {/* Jey: New Logout Button */}
+            <TouchableOpacity
+                style={styles.logoutButton}
+                onPress={handleLogout}
+            >
+                <Image source={logoutIcon} style={styles.logoutIcon} />
+                <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
         </View>
     );
 };
@@ -156,12 +181,11 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 5,
     },
-    // Jey: New style for the custom lock image
     customLockIcon: {
         width: 60,
         height: 60,
         marginBottom: 15,
-        tintColor: '#FF9AA2', // You can apply a tint color to the PNG if needed
+        tintColor: '#FF9AA2',
     },
     title: {
         fontSize: 24,
@@ -205,11 +229,36 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 8,
     },
-    // Jey: New style for the custom refresh image
     customRefreshIcon: {
         width: 20,
         height: 20,
         tintColor: '#FFFFFF',
+    },
+    // Jey: Styles for the new Logout Button
+    logoutButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FF5733', // A distinct color for logout, e.g., redAccent
+        paddingVertical: 12,
+        paddingHorizontal: 25,
+        borderRadius: 10,
+        marginTop: 100, // A bit of space from the refresh button
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    logoutIcon: {
+        width: 20, // Match refresh icon size
+        height: 20, // Match refresh icon size
+        tintColor: '#FFFFFF',
+    },
+    logoutButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 8,
     },
 });
 

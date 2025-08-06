@@ -13,8 +13,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Jey: Step 1: Set up Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18' # Use a Node.js version compatible with your project
+
+      # Jey: Step 2: Install project dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Jey: Step 3: Build the web app, creating the "dist" directory
+      - name: Build web app
+        run: npx expo export --output-dir=dist --platform=web
+
+      # Jey: Step 4: Deploy the built files to a preview channel
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DRIVERROOM_1 }}
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_DRIVERROOM_1 }}'
           projectId: driverroom-1

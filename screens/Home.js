@@ -688,7 +688,7 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 1 minute has passed. Setting driver to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 6000);
+          }, 60000);
         } else {
           // Jey: If the driver is off-duty, clear the timer just in case
           if (fixedTimerRef.current) {
