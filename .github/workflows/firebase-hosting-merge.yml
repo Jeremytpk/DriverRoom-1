@@ -5,33 +5,13 @@ name: Deploy to Firebase Hosting on merge
 on:
   push:
     branches:
-      - main # Ensure this is 'main'
-
+      - main
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Jey: START OF MISSING BUILD STEPS - ADD THESE BACK
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20' # Or your specific Node.js version (e.g., 20, 16)
-
-      - name: Install dependencies
-        run: npm install # Use 'yarn install' if you prefer Yarn
-
-      - name: Build web app
-        run: npx expo export --platform web --output-dir dist # This creates the 'dist' folder
-
-      - name: List files in dist directory (for debugging)
-        run: ls -la dist/ # Keep this for debugging, you can remove it later
-
-      # Jey: END OF MISSING BUILD STEPS
-
-      - name: Deploy to Firebase
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_DRIVERROOM_1 }}
