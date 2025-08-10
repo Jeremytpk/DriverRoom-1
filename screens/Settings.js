@@ -10,6 +10,7 @@ import profilePlaceholderIcon from '../assets/png/profile.png'; // For avatar pl
 import cameraIcon from '../assets/png/camera.png'; // For edit avatar icon
 import userIcon from '../assets/png/user.png'; // For Edit Profile menu item
 import lockIcon from '../assets/png/lock.png'; // For Privacy & Security menu item
+import rate_half from '../assets/png/rate_half.png'; 
 import logoutIcon from '../assets/png/logout.png'; // For Logout button
 
 const Colors = {
@@ -85,18 +86,16 @@ const Settings = () => {
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
           
-          {/*
-          <TouchableOpacity style={styles.menuItem}>
-            <Ionicons name="notifications-outline" size={24} color={Colors.primaryTeal} />
-            <Text style={styles.menuText}>Notifications</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
-          </TouchableOpacity>
-          */}
-
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ResetPassword')}>
             {/* Jey: Replaced Ionicons with custom lock icon */}
             <Image source={lockIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Privacy & Security</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem}>
+            <Image source={rate_half} style={styles.menuItemIcon} />
+            <Text style={styles.menuText}>Feedback</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
 
@@ -246,7 +245,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   logoutButton: {
-    marginTop: 50,
+    //marginTop: 50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

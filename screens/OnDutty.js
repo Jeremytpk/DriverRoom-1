@@ -7,21 +7,23 @@ import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/f
 
 const OnDutty = () => {
     const { userData } = useAuth();
-    const [onDutyDrivers, setOnDutyDrivers] = useState([]);
+    const [onDutyUsers, setOnDutyUsers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState(''); // Jey: State for search bar
-    const [selectedDrivers, setSelectedDrivers] = useState(new Set()); // Jey: State for selected drivers
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedUsers, setSelectedUsers] = useState(new Set());
+    
+    const [checkedInCount, setCheckedInCount] = useState(0);
 
     const checkIntervalRef = useRef(null);
 
-    const autoSwitchToOffDuty = async (driverId, driverName) => {
+    const autoSwitchToOffDuty = async (userId, userName) => {
         try {
-            const userRef = doc(db, 'users', driverId);
+            const userRef = doc(db, 'users', userId);
             await updateDoc(userRef, { isOnDutty: false });
-            console.log(`Jey: Driver ${driverName} automatically switched to off-duty after 1 min.`);
+            console.log(`Jey: User ${userName} automatically switched to off-duty.`);
         } catch (error) {
-            console.error("Jey: Error auto-switching driver status:", error);
-            Alert.alert("Error", "Failed to update driver status automatically.");
+            console.error("Jey: Error auto-switching user status:", error);
+            Alert.alert("Error", "Failed to update user status automatically.");
         }
     };
 
@@ -34,65 +36,73 @@ const OnDutty = () => {
         const onDutyQuery = query(
             collection(db, 'users'),
             where('dspName', '==', userData.dspName),
-            where('role', '==', 'driver'),
+            where('role', 'in', ['driver', 'trainer']), // Fetch both drivers and trainers
             where('isOnDutty', '==', true)
         );
 
         const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
-            const driversList = snapshot.docs.map(doc => ({
+            const usersList = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
             }));
-            setOnDutyDrivers(driversList);
+            
+            const count = usersList.filter(user => user.isCheckedIn).length;
+            setCheckedInCount(count);
+
+            const sortedUsers = usersList.sort((a, b) => {
+                // Prioritize checked-in users at the top
+                if (a.isCheckedIn && !b.isCheckedIn) {
+                    return -1;
+                }
+                if (!a.isCheckedIn && b.isCheckedIn) {
+                    return 1;
+                }
+                // Then sort by role (trainers before drivers)
+                if (a.role === 'trainer' && b.role === 'driver') {
+                    return -1;
+                }
+                if (a.role === 'driver' && b.role === 'trainer') {
+                    return 1;
+                }
+                // Finally, sort alphabetically by name
+                return a.name.localeCompare(b.name);
+            });
+            
+            setOnDutyUsers(sortedUsers);
             setLoading(false);
         }, (error) => {
-            console.error("Jey: Error fetching on-duty drivers:", error);
-            Alert.alert("Error", "Failed to load on-duty drivers.");
+            console.error("Jey: Error fetching on-duty users:", error);
+            Alert.alert("Error", "Failed to load on-duty users.");
             setLoading(false);
         });
 
-        checkIntervalRef.current = setInterval(() => {
-            const now = new Date().getTime();
-            onDutyDrivers.forEach(driver => {
-                if (driver.onDutySince) {
-                    const onDutyTime = driver.onDutySince.toDate().getTime();
-                    const elapsedTime = now - onDutyTime;
-                    if (elapsedTime >= 60000) {
-                        autoSwitchToOffDuty(driver.id, driver.name);
-                    }
-                }
-            });
-        }, 1000);
-
         return () => {
             unsubscribe();
-            if (checkIntervalRef.current) {
-                clearInterval(checkIntervalRef.current);
-            }
         };
-    }, [userData?.dspName, onDutyDrivers]);
+    }, [userData?.dspName]);
 
-    const handleRemoveFromOnDuty = (driverId, driverName) => {
+    const handleRemoveFromOnDuty = (userId, userName) => {
         Alert.alert(
-            "Remove Driver",
-            `Are you sure you want to remove ${driverName} from the on-duty list?`,
+            "Remove User",
+            `Are you sure you want to remove ${userName} from the on-duty list?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Remove",
                     onPress: async () => {
                         try {
-                            const userRef = doc(db, 'users', driverId);
-                            await updateDoc(userRef, { isOnDutty: false });
-                            Alert.alert("Success", `${driverName} has been moved to Off-Duty.`);
-                            setSelectedDrivers(prev => {
+                            const userRef = doc(db, 'users', userId);
+                            // Jey: Automatically check out the user when they are removed from on-duty
+                            await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
+                            Alert.alert("Success", `${userName} has been moved to Off-Duty.`);
+                            setSelectedUsers(prev => {
                                 const newSet = new Set(prev);
-                                newSet.delete(driverId);
+                                newSet.delete(userId);
                                 return newSet;
                             });
                         } catch (error) {
-                            console.error("Jey: Error updating driver status:", error);
-                            Alert.alert("Error", "Failed to update driver status. Please try again.");
+                            console.error("Jey: Error updating user status:", error);
+                            Alert.alert("Error", "Failed to update user status. Please try again.");
                         }
                     },
                     style: "destructive"
@@ -102,50 +112,48 @@ const OnDutty = () => {
         );
     };
 
-    // Jey: New function to toggle selection for a single driver
-    const handleToggleSelect = (driverId) => {
-        setSelectedDrivers(prevSelected => {
+    const handleToggleSelect = (userId) => {
+        setSelectedUsers(prevSelected => {
             const newSelected = new Set(prevSelected);
-            if (newSelected.has(driverId)) {
-                newSelected.delete(driverId);
+            if (newSelected.has(userId)) {
+                newSelected.delete(userId);
             } else {
-                newSelected.add(driverId);
+                newSelected.add(userId);
             }
             return newSelected;
         });
     };
 
-    // Jey: New function to handle "select all" button
     const handleSelectAll = () => {
-        if (selectedDrivers.size === onDutyDrivers.length) {
-            setSelectedDrivers(new Set()); // Deselect all
+        if (selectedUsers.size === onDutyUsers.length) {
+            setSelectedUsers(new Set());
         } else {
-            const allDriverIds = onDutyDrivers.map(driver => driver.id);
-            setSelectedDrivers(new Set(allDriverIds)); // Select all
+            const allUserIds = onDutyUsers.map(user => user.id);
+            setSelectedUsers(new Set(allUserIds));
         }
     };
 
-    // Jey: New function to move all selected drivers to off-duty
     const handleMassOffDuty = () => {
         Alert.alert(
-            "Move Drivers Off-Duty",
-            `Are you sure you want to move ${selectedDrivers.size} driver(s) to off-duty?`,
+            "Move Users Off-Duty",
+            `Are you sure you want to move ${selectedUsers.size} user(s) to off-duty?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
                     text: "Move",
                     onPress: async () => {
                         try {
-                            const updates = Array.from(selectedDrivers).map(async (driverId) => {
-                                const userRef = doc(db, 'users', driverId);
-                                await updateDoc(userRef, { isOnDutty: false });
+                            const updates = Array.from(selectedUsers).map(async (userId) => {
+                                const userRef = doc(db, 'users', userId);
+                                // Jey: Also check out all mass-removed users
+                                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
                             });
                             await Promise.all(updates);
-                            setSelectedDrivers(new Set()); // Clear selection after update
-                            Alert.alert("Success", `${selectedDrivers.size} drivers have been moved to Off-Duty.`);
+                            setSelectedUsers(new Set());
+                            Alert.alert("Success", `${selectedUsers.size} users have been moved to Off-Duty.`);
                         } catch (error) {
-                            console.error("Jey: Error mass updating driver status:", error);
-                            Alert.alert("Error", "Failed to update all driver statuses. Please try again.");
+                            console.error("Jey: Error mass updating user status:", error);
+                            Alert.alert("Error", "Failed to update all user statuses. Please try again.");
                         }
                     },
                     style: "destructive"
@@ -155,25 +163,34 @@ const OnDutty = () => {
         );
     };
 
-    const filteredDrivers = onDutyDrivers.filter(driver =>
-        driver.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredUsers = onDutyUsers.filter(user =>
+        user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const renderDriverItem = ({ item }) => {
-        const isSelected = selectedDrivers.has(item.id);
+    const renderUserItem = ({ item }) => {
+        const isSelected = selectedUsers.has(item.id);
+        const isTrainer = item.role === 'trainer';
+
         return (
-            <TouchableOpacity onPress={() => handleToggleSelect(item.id)} style={styles.driverCard}>
-                <View style={styles.driverInfo}>
+            <TouchableOpacity onPress={() => handleToggleSelect(item.id)} style={styles.userCard}>
+                <View style={styles.userInfo}>
                     <Ionicons
                         name={isSelected ? "checkbox-outline" : "square-outline"}
                         size={24}
                         color={isSelected ? "#6BB9F0" : "#999"}
                         style={{ marginRight: 10 }}
                     />
-                    <Ionicons name="person-circle-outline" size={40} color="#6BB9F0" />
-                    <View style={styles.driverNameContainer}>
-                        <Text style={styles.driverName}>{item.name}</Text>
-                        <Text style={styles.driverId}>{item.id}</Text>
+                    <Ionicons name="person-circle-outline" size={40} color={isTrainer ? "#FFC107" : "#6BB9F0"} />
+                    <View style={styles.userNameContainer}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={styles.userName}>{item.name}</Text>
+                            {isTrainer && (
+                                <View style={styles.trainerLabel}>
+                                    <Text style={styles.trainerLabelText}>Trainer</Text>
+                                </View>
+                            )}
+                        </View>
+                        <Text style={styles.userEmail}>{item.email}</Text>
                         {item.onDutySince && (
                             <Text style={styles.onDutySinceText}>
                                 On-duty since: {item.onDutySince.toDate().toLocaleTimeString()}
@@ -181,13 +198,19 @@ const OnDutty = () => {
                         )}
                     </View>
                 </View>
-                <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
-                >
-                    <Ionicons name="car-outline" size={20} color="#fff" style={styles.removeIcon} />
-                    <Text style={styles.removeButtonText}>Off-Duty</Text>
-                </TouchableOpacity>
+                <View style={styles.actionButtons}>
+                    {item.isCheckedIn && (
+                        <View style={styles.checkedInIcon}>
+                            <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                        </View>
+                    )}
+                    <TouchableOpacity
+                        style={styles.removeButton}
+                        onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
+                    >
+                        <Ionicons name="car-outline" size={20} color="#fff" />
+                    </TouchableOpacity>
+                </View>
             </TouchableOpacity>
         );
     };
@@ -203,41 +226,44 @@ const OnDutty = () => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>On-Duty Drivers</Text>
+            <Text style={styles.title}>On-Duty Drivers & Trainers</Text>
             
-            {/* Jey: Search Bar */}
             <TextInput
                 style={styles.searchBar}
-                placeholder="Search for a driver..."
+                placeholder="Search for a user..."
                 placeholderTextColor="#999"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
 
-            {/* Jey: Select All and Mass Off-Duty buttons */}
             <View style={styles.headerControls}>
-                <TouchableOpacity onPress={handleSelectAll}>
-                    <Text style={styles.selectAllText}>
-                        {selectedDrivers.size === onDutyDrivers.length ? "Deselect All" : "Select All"}
+                <View style={styles.selectAndCount}>
+                    <TouchableOpacity onPress={handleSelectAll}>
+                        <Text style={styles.selectAllText}>
+                            {selectedUsers.size === onDutyUsers.length ? "Deselect All" : "Select All"}
+                        </Text>
+                    </TouchableOpacity>
+                    <Text style={styles.countText}>
+                        <Text style={{color: '#333', fontWeight: 'bold'}}>{onDutyUsers.length}</Text> on-duty | <Text style={{color: '#28a745', fontWeight: 'bold'}}>{checkedInCount}</Text> checked-in
                     </Text>
-                </TouchableOpacity>
-                {selectedDrivers.size > 0 && (
+                </View>
+                {selectedUsers.size > 0 && (
                     <TouchableOpacity style={styles.offDutyAllButton} onPress={handleMassOffDuty}>
                         <Text style={styles.offDutyAllButtonText}>
-                            Move {selectedDrivers.size} Driver(s) Off-Duty
+                            Move {selectedUsers.size} User(s) Off-Duty
                         </Text>
                     </TouchableOpacity>
                 )}
             </View>
             
             <FlatList
-                data={filteredDrivers}
+                data={filteredUsers}
                 keyExtractor={item => item.id}
-                renderItem={renderDriverItem}
+                renderItem={renderUserItem}
                 ListEmptyComponent={() => (
                     <View style={styles.emptyContainer}>
                         <Ionicons name="people-outline" size={50} color="#999" />
-                        <Text style={styles.emptyText}>No drivers are currently on duty.</Text>
+                        <Text style={styles.emptyText}>No users are currently on duty.</Text>
                     </View>
                 )}
                 contentContainerStyle={styles.listContent}
@@ -286,9 +312,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 10,
     },
+    selectAndCount: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     selectAllText: {
         color: '#6BB9F0',
         fontWeight: 'bold',
+    },
+    countText: {
+        marginLeft: 15,
+        fontSize: 14,
+        color: '#666',
     },
     offDutyAllButton: {
         backgroundColor: '#FF5733',
@@ -304,7 +339,7 @@ const styles = StyleSheet.create({
     listContent: {
         paddingBottom: 20,
     },
-    driverCard: {
+    userCard: {
         backgroundColor: '#fff',
         padding: 15,
         borderRadius: 10,
@@ -318,20 +353,20 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
-    driverInfo: {
+    userInfo: {
         flexDirection: 'row',
         alignItems: 'center',
         flex: 1,
     },
-    driverNameContainer: {
+    userNameContainer: {
         marginLeft: 10,
     },
-    driverName: {
+    userName: {
         fontSize: 16,
         fontWeight: 'bold',
         color: '#333',
     },
-    driverId: {
+    userEmail: {
         fontSize: 12,
         color: '#999',
     },
@@ -340,22 +375,27 @@ const styles = StyleSheet.create({
         color: '#888',
         marginTop: 4,
     },
-    removeButton: {
+    actionButtons: {
         flexDirection: 'row',
-        backgroundColor: '#FF5733',
-        paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 5,
         alignItems: 'center',
     },
-    removeButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        marginLeft: 5,
+    checkedInIcon: {
+        backgroundColor: '#28a745',
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
     },
-    //removeIcon: {
-     //   transform: [{ rotateZ: '180deg' }],
-    //},
+    removeButton: {
+        backgroundColor: '#FF5733',
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -365,8 +405,21 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: 18,
         color: '#999',
-        marginTop: 10,
         textAlign: 'center',
+        marginTop: 10,
+    },
+    // New styles for the Trainer label
+    trainerLabel: {
+        backgroundColor: '#FFC107', // A nice, visible color for the label
+        borderRadius: 5,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        marginLeft: 8,
+    },
+    trainerLabelText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#fff',
     },
 });
 

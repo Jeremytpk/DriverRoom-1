@@ -16,8 +16,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-import { doc, getDoc } from 'firebase/firestore'; // Jey: Import Firestore functions
-import { db } from '../../firebase'; // Jey: Assuming 'db' is exported from your firebase.js
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -34,43 +34,39 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const { user } = await login(email, password); // Jey: Get the raw user object from login
+      const { user } = await login(email, password);
 
       if (!user || !user.uid) {
         throw new Error("User object or UID not found after login.");
       }
 
-      // Jey: Fetch the user's document directly from Firestore to get the latest status
       const userDocRef = doc(db, 'users', user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
       if (!userDocSnap.exists()) {
         console.warn("Jey: User document does not exist for UID:", user.uid);
-        // Jey: Handle case where user document might not exist (e.g., new user, or data inconsistency)
-        // You might want to navigate to a profile setup screen or a default dashboard
-        navigation.navigate('PendingApproval'); // Or a more appropriate fallback
+        navigation.navigate('PendingApproval');
         return;
       }
 
       const userDataFromFirestore = userDocSnap.data();
 
-      // Jey: Updated navigation logic to handle different user roles and isOnDutty status
+      // Jey: Updated navigation logic to handle isTrainer role
       if (userDataFromFirestore?.isAdmin) {
         navigation.navigate('AdminScreen');
       } else if (userDataFromFirestore?.isDsp) {
         navigation.navigate('CompanyScreen');
-      } else if (userDataFromFirestore?.role === 'driver') { // Jey: Check if the user is a driver
+      } else if (userDataFromFirestore?.isTrainer) { // Jey: If user is a trainer, navigate to Home
+        navigation.navigate('Home');
+      } else if (userDataFromFirestore?.role === 'driver') {
         if (userDataFromFirestore?.activated && userDataFromFirestore?.isOnDutty) {
           navigation.navigate('Home');
         } else if (userDataFromFirestore?.activated && !userDataFromFirestore?.isOnDutty) {
           navigation.navigate('OffDutty');
         } else {
-          // Jey: If driver is not activated, they go to PendingApproval
           navigation.navigate('PendingApproval');
         }
       } else {
-        // Jey: Fallback for any other roles or unhandled cases (e.g., if 'role' is missing or unknown)
-        // For now, assuming any non-admin/non-dsp also goes to PendingApproval
         navigation.navigate('PendingApproval');
       }
     } catch (error) {

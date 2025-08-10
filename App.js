@@ -33,6 +33,8 @@ import OffDutty from './screens/OffDutty';
 import AdminScreen from './screens/AdminScreen';
 import ResetPassword from './screens/ResetPassword';
 import PasswordResetConfirmation from './screens/PasswordResetConfirmation';
+import Team from './screens/Team';
+import TeamChat from './screens/TeamChat';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -212,6 +214,16 @@ export default function App() {
               name="CompanyScreen"
               component={CompanyScreen}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Team"
+              component={Team}
+              options={{ headerShown: true, title: '' }}
+            />
+            <Stack.Screen
+              name="TeamChat"
+              component={TeamChat}
+              options={{ headerShown: true, title: '' }}
             />
             <Stack.Screen
               name="Notice"

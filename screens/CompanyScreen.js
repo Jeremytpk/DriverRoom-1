@@ -36,14 +36,12 @@ const CompanyScreen = ({ navigation }) => {
 
   const [driverSearchQuery, setDriverSearchQuery] = useState('');
   const [pendingSearchQuery, setPendingSearchQuery] = useState('');
-  // Jey: onDutyDrivers now stores the actual driver objects for better UI state management
   const [onDutyDrivers, setOnDutyDrivers] = useState([]);
   const [onDutyCount, setOnDutyCount] = useState(0);
 
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedDrivers, setSelectedDrivers] = useState(new Set());
 
-  // Jey: Function to update company and all drivers' settings
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
       console.warn("Jey: User data (UID or dspName) not available to update settings.");
@@ -87,7 +85,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   }, [userData]);
 
-  // Jey: Logic to add a single driver to on-duty
   const handleAddToOnDuty = async (driverId, driverName) => {
     try {
       const userRef = doc(db, 'users', driverId);
@@ -99,7 +96,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Logic to add multiple drivers to on-duty using multi-select
   const handleMultiSelectOnDuty = async () => {
     if (selectedDrivers.size === 0) {
       Alert.alert("No Drivers Selected", "Please select at least one driver to mark as on-duty.");
@@ -127,7 +123,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Logic to remove a single driver from on-duty
   const handleRemoveFromOnDuty = async (driverId, driverName) => {
     try {
       const userRef = doc(db, 'users', driverId);
@@ -139,7 +134,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Toggle functions for chat and posts permissions
   const toggleAllowChat = (newValue) => {
     setAllowChat(newValue);
     updateSettingsAndDrivers('allowChat', newValue);
@@ -150,7 +144,6 @@ const CompanyScreen = ({ navigation }) => {
     updateSettingsAndDrivers('allowPosts', newValue);
   };
 
-  // Jey: Main data fetching function
   const fetchCompanyData = async () => {
     setLoading(true);
     setRefreshing(true);
@@ -161,20 +154,29 @@ const CompanyScreen = ({ navigation }) => {
         console.warn("Jey: User data (UID or dspName) not available to fetch company data.");
         return;
       }
-
-      // Fetch all drivers for the DSP
-      const driversQuery = query(
+      
+      // Jey: Fetch both drivers and trainers for the DSP
+      const teamQuery = query(
         collection(db, 'users'),
         where('dspName', '==', userData.dspName),
-        where('role', '==', 'driver')
+        where('role', 'in', ['driver', 'trainer'])
       );
-      const driversSnapshot = await getDocs(driversQuery);
-      const driversData = driversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const teamSnapshot = await getDocs(teamQuery);
+      const teamData = teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      setDrivers(driversData.filter(d => d.activated));
-      setPendingDrivers(driversData.filter(d => !d.activated));
+      // Jey: Filter the team data into separate lists for display
+      const allActiveDriversAndTrainers = teamData.filter(d => d.activated);
+      const pendingDriversOnly = teamData.filter(d => !d.activated);
+      
+      // Jey: Sort the active list to show trainers first
+      const sortedActiveList = allActiveDriversAndTrainers.sort((a, b) => {
+          if (a.role === 'trainer' && b.role !== 'trainer') return -1;
+          if (a.role !== 'trainer' && b.role === 'trainer') return 1;
+          return a.name.localeCompare(b.name);
+      });
+      setDrivers(sortedActiveList);
+      setPendingDrivers(pendingDriversOnly);
 
-      // Fetch notices and safety tips counts and initial data
       const noticesQuery = query(
         collection(db, 'notices_by_dsp', userData.dspName, 'items'),
         orderBy('createdAt', 'desc')
@@ -193,7 +195,6 @@ const CompanyScreen = ({ navigation }) => {
       setSafetyTipsCount(fetchedSafetyTips.length);
       setInitialSafetyTips(fetchedSafetyTips);
 
-      // Fetch company settings
       const companyRef = doc(db, 'users', userData.uid);
       const companyDoc = await getDoc(companyRef);
       if (companyDoc.exists()) {
@@ -211,14 +212,13 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
   
-  // Jey: Real-time listener for on-duty drivers.
   useEffect(() => {
     if (!userData?.dspName) return;
 
     const onDutyQuery = query(
       collection(db, 'users'),
       where('dspName', '==', userData.dspName),
-      where('role', '==', 'driver'),
+      where('role', 'in', ['driver', 'trainer']),
       where('isOnDutty', '==', true)
     );
     const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
@@ -232,12 +232,10 @@ const CompanyScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [userData?.dspName]);
 
-  // Jey: Initial data fetch on component mount
   useEffect(() => {
     fetchCompanyData();
   }, [userData]);
 
-  // Jey: Callback functions for modal updates
   const handleNoticesUpdated = (updatedNotices) => {
     setNoticesCount(updatedNotices.length);
     setInitialNotices(updatedNotices);
@@ -248,12 +246,10 @@ const CompanyScreen = ({ navigation }) => {
     setInitialSafetyTips(updatedTips);
   };
 
-  // Jey: Refresh handler for pull-to-refresh
   const handleRefresh = () => {
     fetchCompanyData();
   };
 
-  // Jey: Logic to activate or deactivate a driver
   const handleActivation = async (driverId, activate) => {
     try {
       await updateDoc(doc(db, 'users', driverId), {
@@ -279,7 +275,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Filtering logic for search bars
   const filteredDrivers = drivers.filter(d =>
     d.name.toLowerCase().includes(driverSearchQuery.toLowerCase())
   );
@@ -287,7 +282,6 @@ const CompanyScreen = ({ navigation }) => {
     d.name.toLowerCase().includes(pendingSearchQuery.toLowerCase())
   );
 
-  // Jey: Multi-select logic for drivers
   const toggleDriverSelection = (driverId) => {
     setSelectedDrivers(prevSelected => {
       const newSelected = new Set(prevSelected);
@@ -309,10 +303,10 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Render function for each driver item in the list
   const renderDriverItem = ({ item }) => {
     const isPending = !item.activated;
     const isOnDuty = onDutyDrivers.some(d => d.id === item.id);
+    const isTrainer = item.role === 'trainer';
 
     return (
       <View style={styles.listItem}>
@@ -328,14 +322,17 @@ const CompanyScreen = ({ navigation }) => {
           )}
           {item.profilePhotoURL ? (
             <Image
-              key={item.id} // Jey: Added key to help with potential re-rendering issues
+              key={item.id}
               source={{ uri: item.profilePhotoURL }}
               style={styles.driverProfilePhoto}
             />
           ) : (
             <FontAwesome name="user-circle" size={30} color="#6BB9F0" style={styles.driverProfilePhotoPlaceholder} />
           )}
-          <Text style={styles.driverName}>{item.name}</Text>
+          <View style={styles.nameAndRole}>
+            <Text style={styles.driverName}>{item.name}</Text>
+            {isTrainer && <Text style={styles.roleTag}>Trainer</Text>}
+          </View>
           {isPending ? (
             <MaterialIcons name="pending" size={20} color="orange" />
           ) : (
@@ -374,7 +371,6 @@ const CompanyScreen = ({ navigation }) => {
     );
   };
 
-  // Jey: Conditional rendering for tab content
   const renderTabContent = () => {
     switch (activeTab) {
       case 'drivers':
@@ -427,7 +423,7 @@ const CompanyScreen = ({ navigation }) => {
               data={filteredDrivers}
               renderItem={renderDriverItem}
               keyExtractor={item => item.id}
-              ListEmptyComponent={<Text style={styles.emptyListText}>No active drivers found.</Text>}
+              ListEmptyComponent={<Text style={styles.emptyListText}>No active drivers or trainers found.</Text>}
               scrollEnabled={false}
             />
           </ScrollView>
@@ -475,6 +471,14 @@ const CompanyScreen = ({ navigation }) => {
                 <Text style={styles.viewAllButtonText}>View/Manage Notices</Text>
               </TouchableOpacity>
             </View>
+            
+            <TouchableOpacity
+              style={styles.teamButton}
+              onPress={() => navigation.navigate('Team')}
+            >
+              <Ionicons name="people-outline" size={24} color="#fff" />
+              <Text style={styles.teamButtonText}>Manage Team</Text>
+            </TouchableOpacity>
 
             <View style={styles.chatButtonsContainer}>
               <TouchableOpacity
@@ -562,7 +566,6 @@ const CompanyScreen = ({ navigation }) => {
     }
   };
 
-  // Jey: Loading indicator for initial data fetch
   if (loading) {
     return (
       <View style={styles.centeredContainer}>
@@ -832,10 +835,24 @@ const styles = StyleSheet.create({
   driverProfilePhotoPlaceholder: {
     marginRight: 10,
   },
+  nameAndRole: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   driverName: {
     fontSize: 16,
     flexShrink: 1,
     marginRight: 5,
+  },
+  roleTag: {
+    backgroundColor: '#008080',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -924,6 +941,26 @@ const styles = StyleSheet.create({
     color: '#6BB9F0',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  teamButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF9AA2',
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  teamButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 10,
   },
   chatButtonsContainer: {
     marginTop: 20,

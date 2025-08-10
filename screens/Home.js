@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   ScrollView, Dimensions, Modal, Platform, RefreshControl, Alert
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons'; // Jey: Keep MaterialIcons for Admin/Company tabs
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
@@ -17,12 +17,14 @@ import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, 
 import { LinearGradient } from 'expo-linear-gradient';
 
 import OffDutty from '../screens/OffDutty';
+import Team from '../screens/Team';
 
 const Stack = createStackNavigator();
 
 const Colors = {
   primaryTeal: '#008080',
   accentSalmon: '#FA8072',
+  checkInGreen: '#28a745',
   lightBackground: '#f8f8f8',
   white: '#FFFFFF',
   darkText: '#333333',
@@ -30,6 +32,7 @@ const Colors = {
   lightGray: '#ececec',
   border: '#e0e0e0',
   inactiveGray: '#A0A0A0',
+  checkOutRed: '#dc3545',
 };
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -42,15 +45,13 @@ const DriverProfileHeader = ({ userData }) => (
         <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, styles.avatarPlaceholder]}>
-          {/* Jey: Replaced Ionicons with profile.png */}
           <Image source={require('../assets/png/profile.png')} style={[styles.profilePng, { tintColor: Colors.white }]} />
         </View>
       )}
     </View>
-    <Text style={styles.profileName}>{userData?.name || 'Driver'}</Text>
-    {userData?.role === 'driver' && (
+    <Text style={styles.profileName}>{userData?.name || 'User'}</Text>
+    {(userData?.role === 'driver' || userData?.role === 'trainer') && (
       <View style={styles.driverInfo}>
-        {/* Jey: Replaced driver.png with business_outline.png */}
         <Image
           source={require('../assets/png/business_outline.png')}
           style={[styles.businessOutlinePng, { tintColor: Colors.mediumText }]}
@@ -72,6 +73,7 @@ const HomeScreen = ({ navigation }) => {
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const autoScrollIntervalRef = useRef(null);
   const [isSwipingForward, setIsSwipingForward] = useState(true);
+  const [isCheckedIn, setIsCheckedIn] = useState(userData?.isCheckedIn || false);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -107,8 +109,10 @@ const HomeScreen = ({ navigation }) => {
         setUserData(prevUserData => ({
           ...prevUserData,
           allowChat: updatedUserData.allowChat ?? true,
-          allowPosts: updatedUserData.allowPosts ?? true
+          allowPosts: updatedUserData.allowPosts ?? true,
+          isCheckedIn: updatedUserData.isCheckedIn ?? false
         }));
+        setIsCheckedIn(updatedUserData.isCheckedIn ?? false);
       }
     }, (error) => {
       console.error("Jey: Error listening to user document:", error);
@@ -222,7 +226,7 @@ const HomeScreen = ({ navigation }) => {
         .then(docSnap => {
           if (docSnap.exists()) {
             const updatedUserData = docSnap.data();
-            if (updatedUserData.role === 'driver' && !updatedUserData.isOnDutty) {
+            if ((updatedUserData.role === 'driver' || updatedUserData.role === 'trainer') && !updatedUserData.isOnDutty) {
               navigation.replace('OffDutty');
             } else {
             }
@@ -279,6 +283,39 @@ const HomeScreen = ({ navigation }) => {
     } else {
       console.warn(`Jey: Could not navigate to tab '${screenNameToNavigate}' via parent. Attempting direct navigation within current stack.`);
       navigation.navigate(screenNameToNavigate);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (isCheckedIn) {
+      handleCheckOut();
+      return;
+    }
+
+    try {
+      const db = getFirestore();
+      const userRef = doc(db, 'users', userData.uid);
+      await updateDoc(userRef, { isCheckedIn: true });
+      setIsCheckedIn(true);
+      Alert.alert("Success", "You have been checked in for the day.");
+    } catch (error) {
+      console.error("Jey: Error checking in:", error);
+      Alert.alert("Error", "Failed to check in. Please try again.");
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!isCheckedIn) return;
+
+    try {
+      const db = getFirestore();
+      const userRef = doc(db, 'users', userData.uid);
+      await updateDoc(userRef, { isCheckedIn: false });
+      setIsCheckedIn(false);
+      Alert.alert("Success", "You have been checked out for the day.");
+    } catch (error) {
+      console.error("Jey: Error checking out:", error);
+      Alert.alert("Error", "Failed to check out. Please try again.");
     }
   };
 
@@ -355,10 +392,9 @@ const HomeScreen = ({ navigation }) => {
             <ActivityIndicator size="large" color={Colors.primaryTeal} />
           </View>
         ) : notices.length > 0 ? (
-          notices.map((notice, index) => (
+          notices.map((notice) => (
             <View key={notice.id} style={styles.noticeCard}>
               <View style={styles.noticeHeader}>
-                {/* Jey: Replaced Ionicons with Image for notices, tinted white for visibility on orange background */}
                 <Image
                   source={require('../assets/png/infos.png')}
                   style={[styles.iconPng, { tintColor: Colors.white }]}
@@ -366,13 +402,10 @@ const HomeScreen = ({ navigation }) => {
                 <Text style={styles.noticeTitle}>{notice.title}</Text>
               </View>
               <Text style={styles.noticeMessage}>{notice.message}</Text>
-              {index < notices.length - 1 && <View style={styles.noticeDivider} />}
             </View>
           ))
         ) : (
-          // Jey: ✨ Conditionally render this block only if notices.length is 0
           <View style={styles.noticesCardNoNotices}>
-            {/* Jey: Replaced Ionicons with Image for no notices, tinted inactiveGray */}
             <Image
               source={require('../assets/png/infos.png')}
               style={[styles.iconPng, { tintColor: Colors.inactiveGray }]}
@@ -387,7 +420,6 @@ const HomeScreen = ({ navigation }) => {
               style={styles.button}
               onPress={() => navigation.navigate('GroupChat')}
             >
-              {/* Jey: Replaced Ionicons with Image for Group Chats, tinted primaryTeal */}
               <Image
                 source={require('../assets/png/users.png')}
                 style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
@@ -406,7 +438,6 @@ const HomeScreen = ({ navigation }) => {
               style={styles.button}
               onPress={() => navigation.navigate('OneChat')}
             >
-              {/* Jey: Replaced Ionicons with Image for Direct Messages, tinted primaryTeal */}
               <Image
                 source={require('../assets/png/user.png')}
                 style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
@@ -428,7 +459,6 @@ const HomeScreen = ({ navigation }) => {
             style={[styles.button, styles.importantButton]}
             onPress={() => navigation.navigate('GateCodes')}
           >
-            {/* Jey: Replaced Ionicons with Image for Gate Codes, tinted white */}
             <Image
               source={require('../assets/png/key.png')}
               style={[styles.iconPng, { tintColor: Colors.white }]}
@@ -436,8 +466,21 @@ const HomeScreen = ({ navigation }) => {
             <Text style={[styles.buttonText, styles.importantButtonText]}>Gate Codes</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.white} />
           </TouchableOpacity>
-        </View>
 
+          <TouchableOpacity
+            style={[styles.button, isCheckedIn ? styles.checkOutButton : styles.checkInButton]}
+            onPress={handleCheckIn}
+          >
+            <Ionicons
+              name={isCheckedIn ? "exit-outline" : "checkmark-circle-outline"}
+              size={24}
+              color={Colors.white}
+            />
+            <Text style={[styles.buttonText, styles.checkInButtonText]}>
+              {isCheckedIn ? 'Check Out' : 'Check In'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <View style={styles.toggleButtonContainer}>
@@ -445,7 +488,6 @@ const HomeScreen = ({ navigation }) => {
           style={styles.toggleButton}
           onPress={() => handleTabPress('HomeTab')}
         >
-          {/* Jey: Replaced Ionicons with Image for Home tab, tinted dynamically */}
           <Image
             source={require('../assets/png/home.png')}
             style={[
@@ -468,7 +510,6 @@ const HomeScreen = ({ navigation }) => {
             style={styles.toggleButton}
             onPress={() => handleTabPress('PostsTab')}
           >
-            {/* Jey: Replaced Ionicons with Image for Posts tab, tinted dynamically */}
             <Image
               source={require('../assets/png/post.png')}
               style={[
@@ -487,12 +528,11 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
-        {userData?.role === 'admin' && (
+        {userData?.isDsp && (
           <TouchableOpacity
             style={styles.toggleButton}
             onPress={() => handleTabPress('AdminTab')}
           >
-            {/* Jey: Keeping MaterialIcons as no PNG was provided */}
             <MaterialIcons
               name="admin-panel-settings"
               size={20}
@@ -514,7 +554,6 @@ const HomeScreen = ({ navigation }) => {
             style={styles.toggleButton}
             onPress={() => handleTabPress('CompanyTab')}
           >
-            {/* Jey: Keeping MaterialIcons as no PNG was provided */}
             <MaterialIcons
               name="business"
               size={20}
@@ -535,7 +574,6 @@ const HomeScreen = ({ navigation }) => {
           style={styles.toggleButton}
           onPress={() => handleTabPress('SettingsTab')}
         >
-          {/* Jey: Replaced Ionicons with Image for Settings tab, tinted dynamically */}
           <Image
             source={require('../assets/png/settings.png')}
             style={[
@@ -638,32 +676,53 @@ const PendingApprovalScreen = ({ navigation }) => {
 };
 
 const HomeWrapper = () => {
-  const { userData, loading } = useAuth();
+  const { userData, loading, setUserData } = useAuth();
   const navigation = useNavigation();
-  const [localIsOnDutyStatus, setLocalIsOnDutyStatus] = useState(false);
-
-  // Jey: useRef to store the timer ID for the fixed 1-minute timeout
+  const [localIsOnDutyOrTrainerStatus, setLocalIsOnDutyOrTrainerStatus] = useState(false);
+  const [showFloatingButton, setShowFloatingButton] = useState(false);
   const fixedTimerRef = useRef(null);
-  
-  // Jey: Function to update the isOnDutty status in Firestore
+
   const updateIsOnDuttyStatus = async (status) => {
-    if (userData?.uid && userData?.role === 'driver') {
+    if (userData?.uid && (userData?.role === 'driver' || userData?.role === 'trainer')) {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       try {
         await updateDoc(userRef, { isOnDutty: status });
-        console.log(`Jey: Driver status updated to ${status}.`);
+        console.log(`Jey: User status updated to ${status}.`);
       } catch (error) {
         console.error("Jey: Error updating isOnDutty status:", error);
       }
     }
   };
-  
-  // Jey: This useEffect hook now handles the onSnapshot listener and the new timer logic
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkUserRole = async () => {
+        if (!userData?.uid) return;
+
+        const db = getFirestore();
+        const userRef = doc(db, 'users', userData.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          const updatedUserData = userSnap.data();
+          setUserData(updatedUserData);
+          setShowFloatingButton(updatedUserData?.isTrainer);
+        }
+      };
+
+      checkUserRole();
+      
+      return () => {
+        // Cleanup if needed
+      };
+    }, [userData?.uid, setUserData])
+  );
+
   useEffect(() => {
-    if (!userData?.uid || userData?.role !== 'driver') {
-      setLocalIsOnDutyStatus(false);
-      // Jey: Clean up timer if role is not a driver or no UID exists
+    const rolesToMonitor = ['driver', 'trainer'];
+    if (!userData?.uid || !rolesToMonitor.includes(userData?.role)) {
+      setLocalIsOnDutyOrTrainerStatus(false);
       if (fixedTimerRef.current) {
         clearTimeout(fixedTimerRef.current);
       }
@@ -676,35 +735,30 @@ const HomeWrapper = () => {
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setLocalIsOnDutyStatus(data.isOnDutty || false);
+        setLocalIsOnDutyOrTrainerStatus(data.isOnDutty || false);
 
-        // Jey: New logic: if the driver is on-duty, start a new timer
         if (data.isOnDutty) {
-          // Jey: Clear any existing timer to prevent multiple timers from running
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
           }
-// Jey: Set a new timer for 1 minute (60,000 milliseconds)
           fixedTimerRef.current = setTimeout(() => {
-            console.log('Jey: 1 minute has passed. Setting driver to off-duty automatically.');
+            console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 60000);
+          }, 6000);
         } else {
-          // Jey: If the driver is off-duty, clear the timer just in case
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
           }
         }
       } else {
         console.warn("Jey: User document not found during isOnDutty listener for UID:", userData.uid);
-        setLocalIsOnDutyStatus(false);
+        setLocalIsOnDutyOrTrainerStatus(false);
       }
     }, (error) => {
-      console.error("Jey: Error listening to driver's isOnDutty status:", error);
-      setLocalIsOnDutyStatus(false);
+      console.error("Jey: Error listening to user's isOnDutty status:", error);
+      setLocalIsOnDutyOrTrainerStatus(false);
     });
 
-    // Jey: Clean up the Firestore listener and the timer on component unmount
     return () => {
       unsubscribe();
       if (fixedTimerRef.current) {
@@ -721,15 +775,14 @@ const HomeWrapper = () => {
     );
   }
 
-  if (userData?.role === 'driver' && !userData?.activated) {
-    return <PendingApprovalScreen />;
-  }
-
-  if (userData?.role === 'driver' && userData?.activated && !localIsOnDutyStatus) {
+  if (userData?.activated && (userData?.role === 'driver' || userData?.role === 'trainer') && !localIsOnDutyOrTrainerStatus) {
     return <OffDutty />;
   }
 
-  // Jey: Removed the onResponderGrant prop since we no longer need to track user interaction
+  if (!userData?.activated) {
+    return <PendingApprovalScreen />;
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <Stack.Navigator
@@ -765,6 +818,11 @@ const HomeWrapper = () => {
           options={{ title: 'Gate Codes' }}
         />
         <Stack.Screen
+          name="Team"
+          component={Team}
+          options={{ title: 'Team Management' }}
+        />
+        <Stack.Screen
           name="GroupConversation"
           component={GroupConversation}
           options={{
@@ -779,6 +837,18 @@ const HomeWrapper = () => {
           }}
         />
       </Stack.Navigator>
+
+      {showFloatingButton && (
+        <TouchableOpacity
+          style={styles.floatingButton}
+          onPress={() => navigation.navigate('Team')}
+        >
+          <Image
+            source={require('../assets/png/team.png')}
+            style={styles.floatingButtonIcon}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -857,7 +927,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Jey: New style for profile.png
   profilePng: {
     width: '100%',
     height: '100%',
@@ -873,7 +942,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  // Jey: New style for business_outline.png
   businessOutlinePng: {
     width: 20,
     height: 20,
@@ -1081,7 +1149,6 @@ const styles = StyleSheet.create({
   importantButtonText: {
     color: Colors.white,
   },
-  // Jey: ✨ New style for PNG icons in buttons
   iconPng: {
     width: 24,
     height: 24,
@@ -1093,6 +1160,18 @@ const styles = StyleSheet.create({
     color: Colors.darkText,
     fontWeight: '600',
     fontSize: 16,
+  },
+  checkInButton: {
+    backgroundColor: Colors.checkInGreen,
+    justifyContent: 'flex-start',
+  },
+  checkOutButton: {
+    backgroundColor: Colors.checkOutRed,
+    justifyContent: 'flex-start',
+  },
+  checkInButtonText: {
+    color: Colors.white,
+    marginLeft: 15,
   },
   startNewChatButtonGradient: {
     width: '90%',
@@ -1140,7 +1219,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginHorizontal: 0,
   },
-  // Jey: ✨ New style for PNG icons in bottom tabs
   bottomTabIconPng: {
     width: 20,
     height: 20,
@@ -1210,6 +1288,28 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: 90,
+    right: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.primaryTeal,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  floatingButtonIcon: {
+    width: 30,
+    height: 30,
+    resizeMode: 'contain',
+    tintColor: Colors.white,
   },
 });
 
