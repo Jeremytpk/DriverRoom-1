@@ -34,9 +34,10 @@ const TeamChat = () => {
 
     useEffect(() => {
         if (!userData?.dspName) return;
+        // Jey: Fetch messages in descending order so the inverted FlatList shows the newest at the bottom
         const messagesQuery = query(
           collection(db, 'teamChats', userData.dspName, 'messages'),
-          orderBy('createdAt', 'asc')
+          orderBy('createdAt', 'desc')
         );
         const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
           const messagesList = snapshot.docs.map(doc => ({
@@ -102,7 +103,7 @@ const TeamChat = () => {
                 keyExtractor={(item) => item.id}
                 renderItem={renderMessage}
                 contentContainerStyle={styles.chatList}
-                inverted={false}
+                inverted={true} // Jey: Corrected to use inverted true for proper chat behavior
               />
               <View style={styles.messageInputContainer}>
                 <TextInput
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   chatList: {
     flexGrow: 1,
     paddingHorizontal: 10,
-    justifyContent: 'flex-end',
+    // Jey: Removed justifyContent: 'flex-end' since inverted prop handles it
   },
   messageContainer: {
     flexDirection: 'column',
@@ -200,6 +201,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
+    bottom: 10,
+    marginBottom: 55
   },
   messageInput: {
     flex: 1,
@@ -209,6 +212,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 16,
     marginRight: 10,
+    
   },
   sendButton: {
     backgroundColor: Colors.primaryTeal,

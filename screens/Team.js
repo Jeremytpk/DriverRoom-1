@@ -7,10 +7,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
   collection, query, where, onSnapshot,
-  doc, updateDoc, getDocs, getFirestore, orderBy
+  doc, updateDoc, getDocs, getFirestore, orderBy, addDoc, deleteDoc
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import TeamChat from './TeamChat';
 
 const Colors = {
   primaryTeal: '#008080',
@@ -29,7 +30,7 @@ const Colors = {
 const trainingDays = ['Day 1', 'Day 2', 'Day 3'];
 
 const Team = () => {
-  const { userData, setUserData } = useAuth(); // Jey: Get setUserData from AuthContext
+  const { userData, setUserData } = useAuth();
   const navigation = useNavigation();
   const db = getFirestore();
   const [trainers, setTrainers] = useState([]);
@@ -48,6 +49,9 @@ const Team = () => {
   const [isTraineeSearching, setIsTraineeSearching] = useState(false);
   const [selectedTrainee, setSelectedTrainee] = useState(null);
   
+  // Jey: Using a simple string state for the trainee name
+  const [traineeNameInput, setTraineeNameInput] = useState('');
+
   const [myTraineeSchedule, setMyTraineeSchedule] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   
@@ -68,10 +72,10 @@ const Team = () => {
       console.error("Jey: Error fetching trainers:", error);
     });
 
+    // Jey: Fetch trainees from the new dedicated 'trainees' collection
     const traineesQuery = query(
-      collection(db, 'users'),
-      where('dspName', '==', userData.dspName),
-      where('role', 'in', ['driver', 'trainee'])
+      collection(db, 'trainees'),
+      where('dspName', '==', userData.dspName)
     );
     const unsubscribeTrainees = onSnapshot(traineesQuery, (snapshot) => {
         const traineesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -85,7 +89,7 @@ const Team = () => {
     if (userData?.isTrainer) {
         setScheduleLoading(true);
         const myScheduleQuery = query(
-            collection(db, 'users'),
+            collection(db, 'trainees'),
             where('assignedTrainerId', '==', userData.uid)
         );
         const unsubscribeMySchedule = onSnapshot(myScheduleQuery, (snapshot) => {
@@ -106,20 +110,12 @@ const Team = () => {
     };
   }, [userData?.dspName, userData?.isTrainer, userData?.uid]);
 
-  const searchDrivers = useCallback(async (queryText, isTraineeSearch = false) => {
+  const searchDrivers = useCallback(async (queryText) => {
     if (queryText.length < 3) {
-      if (isTraineeSearch) {
-        setTraineeSuggestions([]);
-      } else {
-        setSearchSuggestions([]);
-      }
+      setSearchSuggestions([]);
       return;
     }
-    if (isTraineeSearch) {
-      setIsTraineeSearching(true);
-    } else {
-      setIsSearching(true);
-    }
+    setIsSearching(true);
     try {
       const usersRef = collection(db, 'users');
       const q = query(
@@ -132,35 +128,20 @@ const Team = () => {
         (driver.name.toLowerCase().includes(queryText.toLowerCase()) ||
         driver.email.toLowerCase().includes(queryText.toLowerCase()))
       );
-      if (isTraineeSearch) {
-        setTraineeSuggestions(filteredSuggestions);
-      } else {
-        setSearchSuggestions(filteredSuggestions);
-      }
+      setSearchSuggestions(filteredSuggestions);
     } catch (error) {
       console.error("Jey: Error searching for drivers:", error);
     } finally {
-      if (isTraineeSearch) {
-        setIsTraineeSearching(false);
-      } else {
-        setIsSearching(false);
-      }
+      setIsSearching(false);
     }
   }, [userData?.dspName]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      searchDrivers(trainerSearchQuery, false);
+      searchDrivers(trainerSearchQuery);
     }, 500);
     return () => clearTimeout(handler);
   }, [trainerSearchQuery, searchDrivers]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      searchDrivers(traineeSearchQuery, true);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [traineeSearchQuery, searchDrivers]);
 
   const handlePromoteToTrainer = async () => {
     if (!searchedDriver) return;
@@ -182,7 +163,6 @@ const Team = () => {
       await updateDoc(userRef, { isTrainer: false, role: 'driver' });
       Alert.alert("Success", `${searchedDriver.name} is now a driver.`);
       
-      // Jey: Update the local state of the current user if they are the one being demoted
       if (userData.uid === searchedDriver.id) {
           setUserData(prevData => ({ ...prevData, isTrainer: false, role: 'driver' }));
       }
@@ -192,6 +172,66 @@ const Team = () => {
       console.error("Jey: Error demoting to driver:", error);
       Alert.alert("Error", "Failed to demote. Please try again.");
     }
+  };
+  
+  // Jey: New function to handle manual trainee addition
+  const handleAddTrainee = async () => {
+    if (!traineeNameInput.trim()) {
+      Alert.alert("Input Required", "Please enter a name for the new trainee.");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'trainees'), {
+        name: traineeNameInput.trim(),
+        dspName: userData.dspName,
+        createdAt: new Date(),
+        assignedTrainerId: null,
+        assignedTrainerName: null,
+        trainingDay: null,
+      });
+      Alert.alert("Success", `${traineeNameInput.trim()} has been added to the trainee list.`);
+      setTraineeNameInput('');
+    } catch (error) {
+      console.error("Jey: Error adding new trainee:", error);
+      Alert.alert("Error", "Failed to add trainee. Please try again.");
+    }
+  };
+
+  const handleSelectTrainee = (trainee) => {
+    setSelectedTrainee(trainee);
+    setSelectedTraineeId(trainee.id);
+  };
+
+  const handleDeleteTrainee = () => {
+    if (!selectedTrainee) return;
+  
+    Alert.alert(
+      "Confirm Deletion",
+      `Are you sure you want to permanently delete ${selectedTrainee.name}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          onPress: async () => {
+            try {
+              const traineeRef = doc(db, 'trainees', selectedTrainee.id);
+              await deleteDoc(traineeRef);
+              Alert.alert("Success", `${selectedTrainee.name} has been deleted.`);
+              setSelectedTrainee(null);
+              setSelectedTraineeId(null);
+              setSelectedTrainingDay(trainingDays[0]);
+            } catch (error) {
+              console.error("Jey: Error deleting trainee:", error);
+              Alert.alert("Error", "Failed to delete trainee. Please try again.");
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
   };
   
   const handleAssignTrainee = async (trainerId, trainerName) => {
@@ -204,7 +244,7 @@ const Team = () => {
         return;
     }
     try {
-      const traineeRef = doc(db, 'users', selectedTrainee.id);
+      const traineeRef = doc(db, 'trainees', selectedTrainee.id); // Jey: Use 'trainees' collection
       await updateDoc(traineeRef, {
         assignedTrainerId: trainerId,
         assignedTrainerName: trainerName,
@@ -219,24 +259,90 @@ const Team = () => {
       Alert.alert("Error", "Failed to assign trainee. Please try again.");
     }
   };
+
+  const handleUnassignTrainee = async () => {
+    if (!selectedTrainee) return;
   
-  const renderTrainerItem = ({ item }) => (
-    <View style={styles.trainerCard}>
-      <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
-      <View style={styles.trainerInfo}>
-        <Text style={styles.trainerName}>{item.name}</Text>
-        <Text style={styles.trainerRole}>Trainer</Text>
+    try {
+      const traineeRef = doc(db, 'trainees', selectedTrainee.id);
+      await updateDoc(traineeRef, {
+        assignedTrainerId: null,
+        assignedTrainerName: null,
+        trainingDay: null,
+      });
+      Alert.alert("Success", `Trainee ${selectedTrainee.name} has been unassigned.`);
+      setSelectedTrainee(null);
+      setSelectedTraineeId(null);
+      setSelectedTrainingDay(trainingDays[0]);
+    } catch (error) {
+      console.error("Jey: Error unassigning trainee:", error);
+      Alert.alert("Error", "Failed to unassign trainee. Please try again.");
+    }
+  };
+  
+  const renderTrainerItem = ({ item }) => {
+    const isCurrentlyAssigned = selectedTrainee?.assignedTrainerId === item.id;
+    return (
+      <View style={styles.trainerCard}>
+        <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
+        <View style={styles.trainerInfo}>
+          <Text style={styles.trainerName}>{item.name}</Text>
+          <Text style={styles.trainerRole}>Trainer</Text>
+        </View>
+        {selectedTrainee && (
+            isCurrentlyAssigned ? (
+                <TouchableOpacity
+                    style={[styles.assignButton, styles.unassignButton]}
+                    onPress={handleUnassignTrainee}
+                >
+                    <Text style={styles.assignButtonText}>Unassign</Text>
+                </TouchableOpacity>
+            ) : (
+                <TouchableOpacity
+                    style={styles.assignButton}
+                    onPress={() => handleAssignTrainee(item.id, item.name)}
+                >
+                    <Text style={styles.assignButtonText}>Assign</Text>
+                </TouchableOpacity>
+            )
+        )}
       </View>
-      {selectedTrainee && (
-          <TouchableOpacity
-              style={styles.assignButton}
-              onPress={() => handleAssignTrainee(item.id, item.name)}
-          >
-              <Text style={styles.assignButtonText}>Assign</Text>
-          </TouchableOpacity>
-      )}
-    </View>
-  );
+    );
+  };
+  
+  const renderScheduleItem = ({ item }) => {
+    const getDayProgress = (day) => {
+      const dayNumber = parseInt(day.replace('Day ', ''));
+      const lastCompletedDay = parseInt(item.trainingDay?.replace('Day ', ''));
+      return dayNumber <= lastCompletedDay;
+    };
+  
+    return (
+      <View style={styles.traineeProgressCard}>
+        <View style={styles.cardHeader}>
+          <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
+          <View style={styles.cardInfo}>
+            <Text style={styles.traineeNameText}>{item.name}</Text>
+            <Text style={styles.traineeAssignedText}>Assigned: {item.assignedTrainerName || 'N/A'}</Text>
+          </View>
+        </View>
+  
+        <View style={styles.progressContainer}>
+          {trainingDays.map((day) => (
+            <View
+              key={day}
+              style={[
+                styles.progressDay,
+                getDayProgress(day) ? styles.progressDayComplete : styles.progressDayIncomplete,
+              ]}
+            >
+              <Text style={styles.progressDayText}>{day}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
   
   if (loading) {
     return (
@@ -255,22 +361,14 @@ const Team = () => {
       <ScrollView contentContainerStyle={styles.teamContainer}>
         {userData?.isTrainer && (
             <View style={styles.scheduleSection}>
-                <Text style={styles.scheduleTitle}>Your trainees for today:</Text>
+                <Text style={styles.scheduleTitle}>Your Trainee Progress:</Text>
                 {scheduleLoading ? (
                     <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />
                 ) : myTraineeSchedule.length > 0 ? (
                     <FlatList
                         data={myTraineeSchedule}
                         keyExtractor={item => item.id}
-                        renderItem={({ item }) => (
-                            <View style={styles.scheduleItem}>
-                                <Ionicons name="person-outline" size={20} color={Colors.darkText} />
-                                <Text style={styles.scheduleItemText}>{item.name}</Text>
-                                <View style={styles.scheduleDayTag}>
-                                  <Text style={styles.scheduleDayText}>{item.trainingDay || 'Day 1'}</Text>
-                                </View>
-                            </View>
-                        )}
+                        renderItem={renderScheduleItem}
                         scrollEnabled={false}
                     />
                 ) : (
@@ -344,43 +442,42 @@ const Team = () => {
             </View>
             
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Assign Trainees</Text>
-              
-              <TextInput
-                style={styles.searchBar}
-                placeholder="Search for a trainee from user list"
-                placeholderTextColor={Colors.mediumText}
-                value={traineeSearchQuery}
-                onChangeText={setTraineeSearchQuery}
-                autoCapitalize="none"
-              />
-              {isTraineeSearching && <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />}
-              {traineeSearchQuery.length > 2 && traineeSuggestions.length > 0 && !selectedTrainee && (
-                  <View style={styles.suggestionsContainer}>
-                      {traineeSuggestions.map((trainee) => (
-                          <TouchableOpacity
-                              key={trainee.id}
-                              style={styles.suggestionItem}
-                              onPress={() => {
-                                setSelectedTrainee(trainee);
-                                setTraineeSearchQuery('');
-                                setTraineeSuggestions([]);
-                              }}
-                          >
-                              <Text style={styles.suggestionText}>{trainee.name} ({trainee.email})</Text>
-                          </TouchableOpacity>
-                      ))}
-                  </View>
-              )}
-              
-              {selectedTrainee && (
-                <View style={styles.traineeCard}>
-                  <Text style={styles.traineeName}>{selectedTrainee.name}</Text>
-                  <Text style={styles.traineeDetails}>{selectedTrainee.email}</Text>
-                  {selectedTrainee.assignedTrainerName && (
-                      <Text style={styles.traineeDetails}>Assigned Trainer: {selectedTrainee.assignedTrainerName}</Text>
+              <Text style={styles.sectionTitle}>Manage Trainees</Text>
+
+              <View style={styles.addTraineeContainer}>
+                <TextInput
+                  style={styles.addTraineeInput}
+                  placeholder="Enter new trainee's name"
+                  placeholderTextColor={Colors.mediumText}
+                  value={traineeNameInput} // Jey: Correctly bound to traineeNameInput state
+                  onChangeText={setTraineeNameInput} // Jey: Correctly bound to setTraineeNameInput function
+                  autoCapitalize="words"
+                />
+                <TouchableOpacity style={styles.addTraineeButton} onPress={handleAddTrainee}>
+                  <Text style={styles.addTraineeButtonText}>Add Trainee</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.subSectionTitle}>Select an Unassigned Trainee:</Text>
+              {trainees.filter(t => t.assignedTrainerId === null).length > 0 ? (
+                <FlatList
+                  data={trainees.filter(t => t.assignedTrainerId === null)}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.traineeListItem,
+                        selectedTrainee?.id === item.id && styles.selectedTraineeListItem,
+                      ]}
+                      onPress={() => handleSelectTrainee(item)}
+                    >
+                      <Text style={styles.traineeListItemText}>{item.name}</Text>
+                    </TouchableOpacity>
                   )}
-                </View>
+                  scrollEnabled={false}
+                />
+              ) : (
+                <Text style={styles.emptyText}>All trainees are currently assigned.</Text>
               )}
               
               {selectedTrainee && (
@@ -406,8 +503,14 @@ const Team = () => {
 
               {selectedTrainee && (
                 <View style={styles.assignmentTip}>
-                    <Text style={styles.assignmentTipText}>Now select a trainer from the list above to assign this trainee to.</Text>
+                    <Text style={styles.assignmentTipText}>Now select a trainer from the list above to assign this trainee to. Or, unselect the trainee to go back to the full list.</Text>
                 </View>
+              )}
+
+              {selectedTrainee && (
+                <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteTrainee}>
+                  <Text style={styles.deleteButtonText}>Delete Trainee</Text>
+                </TouchableOpacity>
               )}
             </View>
           </>
@@ -562,6 +665,21 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: 'bold',
   },
+  unassignButton: {
+    backgroundColor: Colors.red,
+  },
+  deleteButton: {
+    backgroundColor: Colors.red,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  deleteButtonText: {
+    color: Colors.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
   addTraineeContainer: {
     flexDirection: 'row',
     marginBottom: 15,
@@ -638,6 +756,105 @@ const styles = StyleSheet.create({
   },
   daySelectionButtonTextActive: {
     color: Colors.white,
+  },
+  traineeListItem: {
+    backgroundColor: Colors.white,
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  selectedTraineeListItem: {
+    backgroundColor: Colors.lightGray,
+    borderColor: Colors.primaryTeal,
+    borderWidth: 2,
+  },
+  traineeListItemText: {
+    fontSize: 16,
+    color: Colors.darkText,
+    fontWeight: '500',
+  },
+  assignmentTip: {
+    backgroundColor: Colors.accentSalmon,
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  assignmentTipText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 20,
+  },
+  traineeProgressCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  cardInfo: {
+    marginLeft: 15,
+  },
+  traineeNameText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.darkText,
+  },
+  traineeAssignedText: {
+    fontSize: 14,
+    color: Colors.mediumText,
+    marginTop: 2,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  progressDay: {
+    flex: 1,
+    height: 17,
+    borderRadius: 5,
+    marginHorizontal: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressDayComplete: {
+    backgroundColor: Colors.green,
+  },
+  progressDayIncomplete: {
+    backgroundColor: Colors.grayProgress,
+  },
+  progressDayText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: Colors.white,
+  },
+  startTrainingButton: {
+    backgroundColor: Colors.primaryTeal,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  startTrainingButtonText: {
+    color: Colors.white,
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

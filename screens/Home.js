@@ -18,7 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import OffDutty from '../screens/OffDutty';
 import Team from '../screens/Team';
-import TeamChat from '../screens/TeamChat'; // Jey: Import the TeamChat component
+import TeamChat from '../screens/TeamChat';
 
 const Stack = createStackNavigator();
 
@@ -249,10 +249,8 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleTabPress = (tabName) => {
+    // Jey: If the user is already on the active tab, do nothing
     if (tabName === activeTab) {
-      if (tabName === 'HomeTab') {
-        navigation.popToTop();
-      }
       return;
     }
 

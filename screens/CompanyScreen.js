@@ -42,6 +42,7 @@ const CompanyScreen = ({ navigation }) => {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedDrivers, setSelectedDrivers] = useState(new Set());
 
+  // Jey: Function to update company and all drivers' settings
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
       console.warn("Jey: User data (UID or dspName) not available to update settings.");
@@ -56,10 +57,11 @@ const CompanyScreen = ({ navigation }) => {
       await updateDoc(companyRef, { [field]: value });
       console.log(`Jey: Successfully updated company's ${field} setting to ${value}`);
 
+      // Jey: Update query to target both 'driver' and 'trainer' roles
       const driversQuery = query(
           collection(db, 'users'),
           where('dspName', '==', userData.dspName),
-          where('role', '==', 'driver')
+          where('role', 'in', ['driver', 'trainer'])
       );
       const driversSnapshot = await getDocs(driversQuery);
 
@@ -68,8 +70,8 @@ const CompanyScreen = ({ navigation }) => {
       });
 
       await Promise.all(driverUpdatePromises);
-      console.log(`Jey: Successfully propagated ${field} setting to all drivers of DSP: ${userData.dspName}`);
-      Alert.alert("Success", `Settings for all drivers have been updated.`);
+      console.log(`Jey: Successfully propagated ${field} setting to all drivers and trainers of DSP: ${userData.dspName}`);
+      Alert.alert("Success", `Settings for all drivers and trainers have been updated.`);
 
     } catch (error) {
       console.error(`Jey: Error updating company or driver settings:`, error);
@@ -155,7 +157,6 @@ const CompanyScreen = ({ navigation }) => {
         return;
       }
       
-      // Jey: Fetch both drivers and trainers for the DSP
       const teamQuery = query(
         collection(db, 'users'),
         where('dspName', '==', userData.dspName),
@@ -164,11 +165,9 @@ const CompanyScreen = ({ navigation }) => {
       const teamSnapshot = await getDocs(teamQuery);
       const teamData = teamSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // Jey: Filter the team data into separate lists for display
       const allActiveDriversAndTrainers = teamData.filter(d => d.activated);
       const pendingDriversOnly = teamData.filter(d => !d.activated);
       
-      // Jey: Sort the active list to show trainers first
       const sortedActiveList = allActiveDriversAndTrainers.sort((a, b) => {
           if (a.role === 'trainer' && b.role !== 'trainer') return -1;
           if (a.role !== 'trainer' && b.role === 'trainer') return 1;
@@ -1064,3 +1063,4 @@ const styles = StyleSheet.create({
 });
 
 export default CompanyScreen;
+

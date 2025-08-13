@@ -224,7 +224,7 @@ export default function App() {
             <Stack.Screen
               name="TeamChat"
               component={TeamChat}
-              options={{ headerShown: true, title: '' }}
+              options={{ headerShown: true, title: 'Team Chat', headerTitleAlign: 'center' }}
             />
             <Stack.Screen
               name="Notice"
