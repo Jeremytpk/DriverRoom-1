@@ -35,6 +35,7 @@ import ResetPassword from './screens/ResetPassword';
 import PasswordResetConfirmation from './screens/PasswordResetConfirmation';
 import Team from './screens/Team';
 import TeamChat from './screens/TeamChat';
+import FeedBack from './screens/FeedBack';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -276,6 +277,11 @@ export default function App() {
               name="EditProfile"
               component={EditProfile}
               options={{ headerShown: true, title: '' , headerTitleAlign: 'center' }}
+            />
+            <Stack.Screen
+              name="FeedBack"
+              component={FeedBack}
+              options={{ headerShown: true, title: '', headerTitleAlign: 'center' }}
             />
 
             {/* Chat Screens */}

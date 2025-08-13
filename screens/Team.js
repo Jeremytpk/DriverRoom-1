@@ -7,7 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
   collection, query, where, onSnapshot,
-  doc, updateDoc, getDocs, getFirestore, orderBy, addDoc, deleteDoc
+  doc, updateDoc, getDocs, getFirestore, orderBy
 } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -29,7 +29,7 @@ const Colors = {
 const trainingDays = ['Day 1', 'Day 2', 'Day 3'];
 
 const Team = () => {
-  const { userData } = useAuth();
+  const { userData, setUserData } = useAuth(); // Jey: Get setUserData from AuthContext
   const navigation = useNavigation();
   const db = getFirestore();
   const [trainers, setTrainers] = useState([]);
@@ -37,12 +37,17 @@ const Team = () => {
   const [loading, setLoading] = useState(true);
   
   const [trainerSearchQuery, setTrainerSearchQuery] = useState('');
+  const [selectedTraineeId, setSelectedTraineeId] = useState(null);
+  
   const [searchedDriver, setSearchedDriver] = useState(null);
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   
+  const [traineeSearchQuery, setTraineeSearchQuery] = useState('');
+  const [traineeSuggestions, setTraineeSuggestions] = useState([]);
+  const [isTraineeSearching, setIsTraineeSearching] = useState(false);
   const [selectedTrainee, setSelectedTrainee] = useState(null);
-  const [newTraineeName, setNewTraineeName] = useState('');
+  
   const [myTraineeSchedule, setMyTraineeSchedule] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   
@@ -64,34 +69,35 @@ const Team = () => {
     });
 
     const traineesQuery = query(
-      collection(db, 'trainees'),
-      where('dspName', '==', userData.dspName)
+      collection(db, 'users'),
+      where('dspName', '==', userData.dspName),
+      where('role', 'in', ['driver', 'trainee'])
     );
     const unsubscribeTrainees = onSnapshot(traineesQuery, (snapshot) => {
-      const traineesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setTrainees(traineesList);
-      setLoading(false);
+        const traineesList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setTrainees(traineesList);
+        setLoading(false);
     }, (error) => {
-      console.error("Jey: Error fetching trainees:", error);
-      setLoading(false);
+        console.error("Jey: Error fetching trainees:", error);
+        setLoading(false);
     });
 
     if (userData?.isTrainer) {
-      setScheduleLoading(true);
-      const myScheduleQuery = query(
-        collection(db, 'trainees'),
-        where('assignedTrainerId', '==', userData.uid)
-      );
-      const unsubscribeMySchedule = onSnapshot(myScheduleQuery, (snapshot) => {
-        const myTraineeList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setMyTraineeSchedule(myTraineeList);
-        setScheduleLoading(false);
-      });
-      return () => {
-        unsubscribeTrainers();
-        unsubscribeTrainees();
-        unsubscribeMySchedule();
-      };
+        setScheduleLoading(true);
+        const myScheduleQuery = query(
+            collection(db, 'users'),
+            where('assignedTrainerId', '==', userData.uid)
+        );
+        const unsubscribeMySchedule = onSnapshot(myScheduleQuery, (snapshot) => {
+            const myTraineeList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setMyTraineeSchedule(myTraineeList);
+            setScheduleLoading(false);
+        });
+        return () => {
+            unsubscribeTrainers();
+            unsubscribeTrainees();
+            unsubscribeMySchedule();
+        };
     }
 
     return () => {
@@ -100,12 +106,20 @@ const Team = () => {
     };
   }, [userData?.dspName, userData?.isTrainer, userData?.uid]);
 
-  const searchDrivers = useCallback(async (queryText) => {
+  const searchDrivers = useCallback(async (queryText, isTraineeSearch = false) => {
     if (queryText.length < 3) {
-      setSearchSuggestions([]);
+      if (isTraineeSearch) {
+        setTraineeSuggestions([]);
+      } else {
+        setSearchSuggestions([]);
+      }
       return;
     }
-    setIsSearching(true);
+    if (isTraineeSearch) {
+      setIsTraineeSearching(true);
+    } else {
+      setIsSearching(true);
+    }
     try {
       const usersRef = collection(db, 'users');
       const q = query(
@@ -118,20 +132,35 @@ const Team = () => {
         (driver.name.toLowerCase().includes(queryText.toLowerCase()) ||
         driver.email.toLowerCase().includes(queryText.toLowerCase()))
       );
-      setSearchSuggestions(filteredSuggestions);
+      if (isTraineeSearch) {
+        setTraineeSuggestions(filteredSuggestions);
+      } else {
+        setSearchSuggestions(filteredSuggestions);
+      }
     } catch (error) {
       console.error("Jey: Error searching for drivers:", error);
     } finally {
-      setIsSearching(false);
+      if (isTraineeSearch) {
+        setIsTraineeSearching(false);
+      } else {
+        setIsSearching(false);
+      }
     }
   }, [userData?.dspName]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      searchDrivers(trainerSearchQuery);
+      searchDrivers(trainerSearchQuery, false);
     }, 500);
     return () => clearTimeout(handler);
   }, [trainerSearchQuery, searchDrivers]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      searchDrivers(traineeSearchQuery, true);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [traineeSearchQuery, searchDrivers]);
 
   const handlePromoteToTrainer = async () => {
     if (!searchedDriver) return;
@@ -152,64 +181,17 @@ const Team = () => {
       const userRef = doc(db, 'users', searchedDriver.id);
       await updateDoc(userRef, { isTrainer: false, role: 'driver' });
       Alert.alert("Success", `${searchedDriver.name} is now a driver.`);
+      
+      // Jey: Update the local state of the current user if they are the one being demoted
+      if (userData.uid === searchedDriver.id) {
+          setUserData(prevData => ({ ...prevData, isTrainer: false, role: 'driver' }));
+      }
+
       setSearchedDriver({ ...searchedDriver, isTrainer: false, role: 'driver' });
     } catch (error) {
       console.error("Jey: Error demoting to driver:", error);
       Alert.alert("Error", "Failed to demote. Please try again.");
     }
-  };
-  
-  const handleAddTrainee = async () => {
-    if (!newTraineeName.trim()) {
-      Alert.alert("Input Required", "Please enter a name for the new trainee.");
-      return;
-    }
-    try {
-      await addDoc(collection(db, 'trainees'), {
-        name: newTraineeName.trim(),
-        dspName: userData.dspName,
-        createdAt: new Date(),
-        assignedTrainerId: null,
-        assignedTrainerName: null,
-        trainingDay: null,
-      });
-      Alert.alert("Success", `${newTraineeName.trim()} has been added to the trainee list.`);
-      setNewTraineeName('');
-    } catch (error) {
-      console.error("Jey: Error adding new trainee:", error);
-      Alert.alert("Error", "Failed to add trainee. Please try again.");
-    }
-  };
-
-  const handleDeleteTrainee = () => {
-    if (!selectedTrainee) return;
-  
-    Alert.alert(
-      "Confirm Deletion",
-      `Are you sure you want to permanently delete ${selectedTrainee.name}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Delete",
-          onPress: async () => {
-            try {
-              const traineeRef = doc(db, 'trainees', selectedTrainee.id);
-              await deleteDoc(traineeRef);
-              Alert.alert("Success", `${selectedTrainee.name} has been deleted.`);
-              setSelectedTrainee(null); // Clear selected trainee after deletion
-              setSelectedTrainingDay(trainingDays[0]);
-            } catch (error) {
-              console.error("Jey: Error deleting trainee:", error);
-              Alert.alert("Error", "Failed to delete trainee. Please try again.");
-            }
-          },
-          style: "destructive"
-        }
-      ]
-    );
   };
   
   const handleAssignTrainee = async (trainerId, trainerName) => {
@@ -218,11 +200,11 @@ const Team = () => {
       return;
     }
     if (!selectedTrainingDay) {
-      Alert.alert("No Training Day Selected", "Please select a training day (Day 1, 2, or 3) for the trainee.");
-      return;
+        Alert.alert("No Training Day Selected", "Please select a training day (Day 1, 2, or 3) for the trainee.");
+        return;
     }
     try {
-      const traineeRef = doc(db, 'trainees', selectedTrainee.id);
+      const traineeRef = doc(db, 'users', selectedTrainee.id);
       await updateDoc(traineeRef, {
         assignedTrainerId: trainerId,
         assignedTrainerName: trainerName,
@@ -230,104 +212,31 @@ const Team = () => {
       });
       Alert.alert("Success", `Trainee ${selectedTrainee.name} assigned to ${trainerName} for ${selectedTrainingDay} successfully!`);
       setSelectedTrainee(null);
+      setSelectedTraineeId(null);
       setSelectedTrainingDay(trainingDays[0]);
     } catch (error) {
       console.error("Jey: Error assigning trainee:", error);
       Alert.alert("Error", "Failed to assign trainee. Please try again.");
     }
   };
-
-  const handleUnassignTrainee = async () => {
-    if (!selectedTrainee) return;
-
-    try {
-      const traineeRef = doc(db, 'trainees', selectedTrainee.id);
-      await updateDoc(traineeRef, {
-        assignedTrainerId: null,
-        assignedTrainerName: null,
-        trainingDay: null,
-      });
-      Alert.alert("Success", `Trainee ${selectedTrainee.name} has been unassigned.`);
-      setSelectedTrainee(null);
-      setSelectedTrainingDay(trainingDays[0]);
-    } catch (error) {
-      console.error("Jey: Error unassigning trainee:", error);
-      Alert.alert("Error", "Failed to unassign trainee. Please try again.");
-    }
-  };
-
-  const handleSelectTrainee = (trainee) => {
-    setSelectedTrainee(trainee);
-  };
   
-  const renderTrainerItem = ({ item }) => {
-    const isCurrentlyAssigned = selectedTrainee?.assignedTrainerId === item.id;
-    return (
-      <View style={styles.trainerCard}>
-        <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
-        <View style={styles.trainerInfo}>
-          <Text style={styles.trainerName}>{item.name}</Text>
-          <Text style={styles.trainerRole}>Trainer</Text>
-        </View>
-        {selectedTrainee && (
-            isCurrentlyAssigned ? (
-                <TouchableOpacity
-                    style={[styles.assignButton, styles.unassignButton]}
-                    onPress={handleUnassignTrainee}
-                >
-                    <Text style={styles.assignButtonText}>Unassign</Text>
-                </TouchableOpacity>
-            ) : (
-                <TouchableOpacity
-                    style={styles.assignButton}
-                    onPress={() => handleAssignTrainee(item.id, item.name)}
-                >
-                    <Text style={styles.assignButtonText}>Assign</Text>
-                </TouchableOpacity>
-            )
-        )}
+  const renderTrainerItem = ({ item }) => (
+    <View style={styles.trainerCard}>
+      <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
+      <View style={styles.trainerInfo}>
+        <Text style={styles.trainerName}>{item.name}</Text>
+        <Text style={styles.trainerRole}>Trainer</Text>
       </View>
-    );
-  };
-
-  const renderScheduleItem = ({ item }) => {
-    const getDayProgress = (day) => {
-      const dayNumber = parseInt(day.replace('Day ', ''));
-      const lastCompletedDay = parseInt(item.trainingDay?.replace('Day ', ''));
-      return dayNumber <= lastCompletedDay;
-    };
-  
-    return (
-      <View style={styles.traineeProgressCard}>
-        <View style={styles.cardHeader}>
-          <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
-          <View style={styles.cardInfo}>
-            <Text style={styles.traineeNameText}>{item.name}</Text>
-            <Text style={styles.traineeAssignedText}>Assigned: {item.assignedTrainerName || 'N/A'}</Text>
-          </View>
-        </View>
-  
-        <View style={styles.progressContainer}>
-          {trainingDays.map((day) => (
-            <View
-              key={day}
-              style={[
-                styles.progressDay,
-                getDayProgress(day) ? styles.progressDayComplete : styles.progressDayIncomplete,
-              ]}
-            >
-              <Text style={styles.progressDayText}>{day}</Text>
-            </View>
-          ))}
-        </View>
-        {/*
-        <TouchableOpacity style={styles.startTrainingButton}>
-          <Text style={styles.startTrainingButtonText}>Start Training</Text>
-        </TouchableOpacity>
-        */}
-      </View>
-    );
-  };
+      {selectedTrainee && (
+          <TouchableOpacity
+              style={styles.assignButton}
+              onPress={() => handleAssignTrainee(item.id, item.name)}
+          >
+              <Text style={styles.assignButtonText}>Assign</Text>
+          </TouchableOpacity>
+      )}
+    </View>
+  );
   
   if (loading) {
     return (
@@ -346,14 +255,22 @@ const Team = () => {
       <ScrollView contentContainerStyle={styles.teamContainer}>
         {userData?.isTrainer && (
             <View style={styles.scheduleSection}>
-                <Text style={styles.scheduleTitle}>Your Trainee Progress:</Text>
+                <Text style={styles.scheduleTitle}>Your trainees for today:</Text>
                 {scheduleLoading ? (
                     <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />
                 ) : myTraineeSchedule.length > 0 ? (
                     <FlatList
                         data={myTraineeSchedule}
                         keyExtractor={item => item.id}
-                        renderItem={renderScheduleItem}
+                        renderItem={({ item }) => (
+                            <View style={styles.scheduleItem}>
+                                <Ionicons name="person-outline" size={20} color={Colors.darkText} />
+                                <Text style={styles.scheduleItemText}>{item.name}</Text>
+                                <View style={styles.scheduleDayTag}>
+                                  <Text style={styles.scheduleDayText}>{item.trainingDay || 'Day 1'}</Text>
+                                </View>
+                            </View>
+                        )}
                         scrollEnabled={false}
                     />
                 ) : (
@@ -427,42 +344,43 @@ const Team = () => {
             </View>
             
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Manage Trainees</Text>
-
-              <View style={styles.addTraineeContainer}>
-                <TextInput
-                  style={styles.addTraineeInput}
-                  placeholder="Enter new trainee's name"
-                  placeholderTextColor={Colors.mediumText}
-                  value={newTraineeName}
-                  onChangeText={setNewTraineeName}
-                  autoCapitalize="words"
-                />
-                <TouchableOpacity style={styles.addTraineeButton} onPress={handleAddTrainee}>
-                  <Text style={styles.addTraineeButtonText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.subSectionTitle}>Select an Unassigned Trainee:</Text>
-              {trainees.filter(t => t.assignedTrainerId === null).length > 0 ? (
-                <FlatList
-                  data={trainees.filter(t => t.assignedTrainerId === null)}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.traineeListItem,
-                        selectedTrainee?.id === item.id && styles.selectedTraineeListItem,
-                      ]}
-                      onPress={() => handleSelectTrainee(item)}
-                    >
-                      <Text style={styles.traineeListItemText}>{item.name}</Text>
-                    </TouchableOpacity>
+              <Text style={styles.sectionTitle}>Assign Trainees</Text>
+              
+              <TextInput
+                style={styles.searchBar}
+                placeholder="Search for a trainee from user list"
+                placeholderTextColor={Colors.mediumText}
+                value={traineeSearchQuery}
+                onChangeText={setTraineeSearchQuery}
+                autoCapitalize="none"
+              />
+              {isTraineeSearching && <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />}
+              {traineeSearchQuery.length > 2 && traineeSuggestions.length > 0 && !selectedTrainee && (
+                  <View style={styles.suggestionsContainer}>
+                      {traineeSuggestions.map((trainee) => (
+                          <TouchableOpacity
+                              key={trainee.id}
+                              style={styles.suggestionItem}
+                              onPress={() => {
+                                setSelectedTrainee(trainee);
+                                setTraineeSearchQuery('');
+                                setTraineeSuggestions([]);
+                              }}
+                          >
+                              <Text style={styles.suggestionText}>{trainee.name} ({trainee.email})</Text>
+                          </TouchableOpacity>
+                      ))}
+                  </View>
+              )}
+              
+              {selectedTrainee && (
+                <View style={styles.traineeCard}>
+                  <Text style={styles.traineeName}>{selectedTrainee.name}</Text>
+                  <Text style={styles.traineeDetails}>{selectedTrainee.email}</Text>
+                  {selectedTrainee.assignedTrainerName && (
+                      <Text style={styles.traineeDetails}>Assigned Trainer: {selectedTrainee.assignedTrainerName}</Text>
                   )}
-                  scrollEnabled={false}
-                />
-              ) : (
-                <Text style={styles.emptyText}>All trainees are currently assigned.</Text>
+                </View>
               )}
               
               {selectedTrainee && (
@@ -488,17 +406,9 @@ const Team = () => {
 
               {selectedTrainee && (
                 <View style={styles.assignmentTip}>
-                    <Text style={styles.assignmentTipText}>Now select a trainer from the list above to assign this trainee to. Or, unselect the trainee to go back to the full list.</Text>
+                    <Text style={styles.assignmentTipText}>Now select a trainer from the list above to assign this trainee to.</Text>
                 </View>
               )}
-
-              {selectedTrainee && (
-                <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteTrainee}>
-                  <Text style={styles.deleteButtonText}>Delete Trainee</Text>
-                </TouchableOpacity>
-              )}
-
-              <View style={styles.separator} />
             </View>
           </>
         )}
@@ -652,21 +562,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: 'bold',
   },
-  unassignButton: {
-    backgroundColor: Colors.red,
-  },
-  deleteButton: {
-    backgroundColor: Colors.red,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  deleteButtonText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
   addTraineeContainer: {
     flexDirection: 'row',
     marginBottom: 15,
@@ -743,105 +638,6 @@ const styles = StyleSheet.create({
   },
   daySelectionButtonTextActive: {
     color: Colors.white,
-  },
-  traineeListItem: {
-    backgroundColor: Colors.white,
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  selectedTraineeListItem: {
-    backgroundColor: Colors.lightGray,
-    borderColor: Colors.primaryTeal,
-    borderWidth: 2,
-  },
-  traineeListItemText: {
-    fontSize: 16,
-    color: Colors.darkText,
-    fontWeight: '500',
-  },
-  assignmentTip: {
-    backgroundColor: Colors.accentSalmon,
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  assignmentTipText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 20,
-  },
-  traineeProgressCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  cardInfo: {
-    marginLeft: 15,
-  },
-  traineeNameText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.darkText,
-  },
-  traineeAssignedText: {
-    fontSize: 14,
-    color: Colors.mediumText,
-    marginTop: 2,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 5,
-  },
-  progressDay: {
-    flex: 1,
-    height: 17,
-    borderRadius: 5,
-    marginHorizontal: 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressDayComplete: {
-    backgroundColor: Colors.green,
-  },
-  progressDayIncomplete: {
-    backgroundColor: Colors.grayProgress,
-  },
-  progressDayText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: Colors.white,
-  },
-  startTrainingButton: {
-    backgroundColor: Colors.primaryTeal,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  startTrainingButtonText: {
-    color: Colors.white,
-    fontWeight: 'bold',
-    fontSize: 16,
   },
 });
 

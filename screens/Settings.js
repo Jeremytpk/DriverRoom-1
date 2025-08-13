@@ -1,17 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Still keep Ionicons if you use it elsewhere or for other icons not specified
+import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
 // Jey: Import your local image assets
-import profilePlaceholderIcon from '../assets/png/profile.png'; // For avatar placeholder
-import cameraIcon from '../assets/png/camera.png'; // For edit avatar icon
-import userIcon from '../assets/png/user.png'; // For Edit Profile menu item
-import lockIcon from '../assets/png/lock.png'; // For Privacy & Security menu item
-import rate_half from '../assets/png/rate_half.png'; 
-import logoutIcon from '../assets/png/logout.png'; // For Logout button
+import profilePlaceholderIcon from '../assets/png/profile.png';
+import cameraIcon from '../assets/png/camera.png';
+import userIcon from '../assets/png/user.png';
+import lockIcon from '../assets/png/lock.png';
+import rate_half from '../assets/png/rate_half.png';
+import logoutIcon from '../assets/png/logout.png';
+
+// Jey: Import the new FeedBack.js component
+import FeedBack from './FeedBack';
 
 const Colors = {
   primaryTeal: '#007070',
@@ -57,12 +60,10 @@ const Settings = () => {
               <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                {/* Jey: Replaced Ionicons with custom profile placeholder image */}
                 <Image source={profilePlaceholderIcon} style={styles.profilePlaceholderImage} />
               </View>
             )}
             <View style={styles.editAvatarIcon}>
-              {/* Jey: Replaced Ionicons with custom camera icon */}
               <Image source={cameraIcon} style={styles.cameraImage} />
             </View>
           </TouchableOpacity>
@@ -80,20 +81,19 @@ const Settings = () => {
           <Text style={styles.menuSectionTitle}>General</Text>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
-            {/* Jey: Replaced Ionicons with custom user icon */}
             <Image source={userIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
           
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ResetPassword')}>
-            {/* Jey: Replaced Ionicons with custom lock icon */}
             <Image source={lockIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Privacy & Security</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          {/* Jey: Updated Feedback button to navigate to FeedBack.js */}
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('FeedBack')}>
             <Image source={rate_half} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Feedback</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
@@ -101,7 +101,6 @@ const Settings = () => {
 
           {/* Logout Button - Visually distinct */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            {/* Jey: Replaced Ionicons with custom logout icon */}
             <Image source={logoutIcon} style={styles.logoutIcon} />
             <Text style={styles.logoutButtonText}>Logout</Text>
           </TouchableOpacity>
@@ -152,11 +151,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Jey: Style for the profile placeholder image
   profilePlaceholderImage: {
-    width: 80, // Adjust size as needed
-    height: 80, // Adjust size as needed
-    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
+    width: 80,
+    height: 80,
+    tintColor: Colors.white,
   },
   editAvatarIcon: {
     position: 'absolute',
@@ -168,11 +166,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.white,
   },
-  // Jey: Style for the camera image
   cameraImage: {
-    width: 20, // Adjust size as needed
-    height: 20, // Adjust size as needed
-    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
+    width: 20,
+    height: 20,
+    tintColor: Colors.white,
   },
   name: {
     fontSize: 24,
@@ -229,11 +226,10 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
     backgroundColor: Colors.white,
   },
-  // Jey: Style for menu item icons
   menuItemIcon: {
-    width: 24, // Match Ionicons size
-    height: 24, // Match Ionicons size
-    tintColor: Colors.primaryTeal, // Apply tint if your PNG is a monochrome icon
+    width: 24,
+    height: 24,
+    tintColor: Colors.primaryTeal,
   },
   menuText: {
     marginLeft: 15,
@@ -245,7 +241,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   logoutButton: {
-    //marginTop: 50,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -254,11 +249,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
   },
-  // Jey: Style for the logout icon
   logoutIcon: {
-    width: 24, // Match Ionicons size
-    height: 24, // Match Ionicons size
-    tintColor: Colors.redAccent, // Apply tint if your PNG is a monochrome icon
+    width: 24,
+    height: 24,
+    tintColor: Colors.redAccent,
   },
   logoutButtonText: {
     marginLeft: 10,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, FlatList, TouchableOpacity, 
-ActivityIndicator, TextInput, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+ActivityIndicator, TextInput, Image, Alert, KeyboardAvoidingView, Platform  } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { collection, query, where, getDocs, orderBy, addDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase'; // Adjust path as needed

@@ -5,37 +5,41 @@ import { useAuth } from '../context/AuthContext';
 
 const LoadingScreen = () => {
   const navigation = useNavigation();
-  const { user, userData, loadingUser } = useAuth(); // Get loadingUser
+  const { currentUser, userData, loading } = useAuth();
 
   useEffect(() => {
-    // Only navigate once loadingUser is false, meaning Firebase Auth state is confirmed
-    if (!loadingUser) {
-      console.log("Jey: LoadingScreen - Auth state determined. User:", user ? user.uid : "No user");
+    if (!loading) {
+      console.log("Jey: LoadingScreen - Auth state determined. User:", currentUser ? currentUser.uid : "No user");
 
-      if (user) {
-        // User is authenticated
-        // Now, wait for userData to be loaded or proceed if it's not a critical dependency for initial route
-        // For role-based redirection, it's better to wait for userData too.
-        if (userData === null && !loadingUserData) { // If user exists but userData is null and not loading, maybe it's a new user without data yet, or an error.
-          // Handle cases where user is logged in but has no Firestore profile (e.g., brand new sign-up)
-          // You might want to navigate to a profile creation screen here.
-          console.warn("Jey: User logged in, but no Firestore userData found or still loading.");
-          // For now, let's assume if user exists, we proceed, if userData is still loading that's handled by other logic.
-        }
-
-        if (userData?.activated === false) {
-          navigation.replace('PendingApproval');
-        } else if (userData?.role === 'company' || userData?.isDsp === true) {
+      if (currentUser) {
+        // Jey: User is authenticated. Now, check user data for specific routing.
+        // Jey: Prioritize admin and DSP roles, ignoring the 'activated' status for them.
+        if (userData?.isAdmin) {
+          navigation.replace('AdminScreen');
+        } else if (userData?.isDsp) {
           navigation.replace('CompanyScreen');
+        } else if (userData?.activated) {
+          // Jey: Logic for activated general users (not admins or DSPs)
+          if (userData?.role === 'driver') {
+            if (userData?.isOnDutty) {
+              navigation.replace('Home');
+            } else {
+              navigation.replace('OffDutty');
+            }
+          } else {
+            navigation.replace('Main');
+          }
         } else {
-          navigation.replace('Main'); // Default to Main Tabs for regular users
+          // Jey: All other cases where a user exists but is not activated,
+          // and is not an admin or DSP.
+          navigation.replace('PendingApproval');
         }
       } else {
-        // No authenticated user, go to Login
+        // Jey: No authenticated user, go to Login
         navigation.replace('Login');
       }
     }
-  }, [user, userData, loadingUser, navigation]); // Add loadingUserData if you want to wait for that explicitly
+  }, [currentUser, userData, loading, navigation]);
 
   return (
     <View style={styles.container}>

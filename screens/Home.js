@@ -18,6 +18,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import OffDutty from '../screens/OffDutty';
 import Team from '../screens/Team';
+import TeamChat from '../screens/TeamChat'; // Jey: Import the TeamChat component
 
 const Stack = createStackNavigator();
 
@@ -744,7 +745,7 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 6000);
+          }, 60000);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
@@ -821,6 +822,11 @@ const HomeWrapper = () => {
           name="Team"
           component={Team}
           options={{ title: 'Team Management' }}
+        />
+        <Stack.Screen
+          name="TeamChat"
+          component={TeamChat}
+          options={{ title: 'Team Chat' }}
         />
         <Stack.Screen
           name="GroupConversation"
