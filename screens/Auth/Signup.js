@@ -217,12 +217,13 @@ const Signup = ({ navigation }) => {
       }}
     >
       <Text style={styles.companyText}>{item.name}</Text>
-      {item.address && <Text style={styles.companySubtext}>{item.address}</Text>}
+      {item.stationLocation && <Text style={styles.companySubtext}>{item.stationLocation}</Text>}
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
+    <ScrollView>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -232,9 +233,15 @@ const Signup = ({ navigation }) => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          <Image
+              source={require('../../assets/logoOnly.png')}
+              style={styles.logo}
+            />
+
           <Text style={styles.title}>Create Your Account</Text>
 
-          {/* Profile Image Selection */}
+          {/*
+          //Profile//
           <TouchableOpacity
             style={styles.profileImageContainer}
             onPress={pickImage}
@@ -248,8 +255,35 @@ const Signup = ({ navigation }) => {
               </View>
             )}
           </TouchableOpacity>
+          */}
+
+          {/* Company Dropdown Selector for Driver Role */}
+          <View style={styles.inputGroup}>
+          <ScrollView>
+            <Text style={styles.label}>Select Your Company</Text>
+            <TouchableOpacity
+              ref={dropdownRef}
+              onLayout={onDropdownLayout}
+              style={styles.dropdownSelector}
+              onPress={() => setShowCompanyDropdown(true)}
+              disabled={loadingCompanies}
+            >
+              {loadingCompanies ? (
+                <ActivityIndicator size="small" color="#666" />
+              ) : (
+                <>
+                  <Text style={selectedCompany ? styles.dropdownText : styles.dropdownPlaceholder}>
+                    {selectedCompany ? selectedCompany.name : 'Choose your company'}
+                  </Text>
+                  <MaterialIcons name="keyboard-arrow-down" size={24} color="#666" />
+                </>
+              )}
+            </TouchableOpacity>
+            </ScrollView>
+          </View>
 
           {/* Full Name Input */}
+          <Text style={styles.label}>Your Informations</Text>
           <TextInput
             style={styles.input}
             placeholder='Full Name'
@@ -290,29 +324,6 @@ const Signup = ({ navigation }) => {
             onChangeText={setConfirmPassword}
             secureTextEntry
           />
-
-          {/* Company Dropdown Selector for Driver Role */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Select Your Company</Text>
-            <TouchableOpacity
-              ref={dropdownRef}
-              onLayout={onDropdownLayout}
-              style={styles.dropdownSelector}
-              onPress={() => setShowCompanyDropdown(true)}
-              disabled={loadingCompanies}
-            >
-              {loadingCompanies ? (
-                <ActivityIndicator size="small" color="#666" />
-              ) : (
-                <>
-                  <Text style={selectedCompany ? styles.dropdownText : styles.dropdownPlaceholder}>
-                    {selectedCompany ? selectedCompany.name : 'Choose your company'}
-                  </Text>
-                  <MaterialIcons name="keyboard-arrow-down" size={24} color="#666" />
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
 
           {/* Register Button */}
           <TouchableOpacity
@@ -379,6 +390,7 @@ const Signup = ({ navigation }) => {
           </View>
         </Modal>
       </KeyboardAvoidingView>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -397,6 +409,14 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 40,
     justifyContent: 'center',
+  },
+  logo: {
+    alignSelf: 'center',
+    width: 150,
+    height: 150,
+    marginBottom: 10,
+    borderRadius: 100,
+    resizeMode: 'cover'
   },
   title: {
     fontSize: 28,

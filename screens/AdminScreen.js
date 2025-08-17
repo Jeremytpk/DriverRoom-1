@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
   TextInput, Alert, Image, ScrollView, RefreshControl
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { collection, query, getDocs, where, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore'; // Jey: Added getDoc
+import { collection, query, getDocs, where, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import CompanyModal from '../components/CompanyModal';
 import AssignDSPModal from '../components/AssignDSPModal';
 
@@ -13,6 +13,8 @@ const AdminScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('companies');
   const [companies, setCompanies] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,67 +22,65 @@ const AdminScreen = ({ navigation }) => {
   const [isCompanyModalVisible, setIsCompanyModalVisible] = useState(false);
   const [companyToEdit, setCompanyToEdit] = useState(null);
 
-  const [isAssignDSPModalVisible, setIsAssignDSPModalVisible] = useState(false);
+  const [isAssignDSPModalVisible, setIsAssignDSPModal] = useState(false);
   const [selectedCompanyForDSP, setSelectedCompanyForDSP] = useState(null);
-  const [allUsers, setAllUsers] = useState([]);
   
-  // Jey: New state for the logged-in user
+  // Jey: State for the logged-in user
   const [loggedInUser, setLoggedInUser] = useState(null);
 
   // Jey: Placeholder function to get the current user ID
+  // **IMPORTANT:** Replace this with your actual logic to get the current user's ID
   const getUserId = () => {
-      // **IMPORTANT:** Replace this with your actual logic to get the current user's ID
-      // This could come from Firebase Auth, a global state, or a context provider.
-      // For example: `return auth.currentUser.uid;`
-      return 'your-current-user-id';
+    // For example: `return auth.currentUser.uid;`
+    // Jey: Using the ID from your screenshot for testing
+    return 'nGpRSSIgZZeZExkZWDxRS80z8A3';
   };
 
-  const fetchAdminData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
+    setRefreshing(true);
     try {
-      // Jey: Fetch logged-in user data
-      const currentUserId = getUserId();
-      if (currentUserId && currentUserId !== 'your-current-user-id') {
-        const userDocRef = doc(db, 'users', currentUserId);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          setLoggedInUser({ id: userDocSnap.id, ...userDocSnap.data() });
-        } else {
-          setLoggedInUser({ name: 'Admin User', photoURL: null });
-        }
-      } else {
-        setLoggedInUser({ name: 'Admin User', photoURL: null });
-      }
+      // Jey: Fetch all data concurrently and efficiently
+      const [
+        usersSnapshot,
+        companiesSnapshot,
+        driversSnapshot
+      ] = await Promise.all([
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'companies')),
+        getDocs(query(collection(db, 'users'), where('role', '==', 'driver')))
+      ]);
 
-      const usersSnapshot = await getDocs(collection(db, 'users'));
       const allUsersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAllUsers(allUsersData);
-
-      const companiesSnapshot = await getDocs(collection(db, 'companies'));
       const companiesData = companiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCompanies(companiesData);
-
-      const driversQuery = query(collection(db, 'users'), where('role', '==', 'driver'));
-      const driversSnapshot = await getDocs(driversQuery);
       const driversData = driversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      setAllUsers(allUsersData);
+      setCompanies(companiesData);
       setDrivers(driversData);
+
+      // Jey: Find the logged-in user's data from the fetched list
+      const currentUserId = getUserId();
+      const currentUserData = allUsersData.find(user => user.id === currentUserId);
+      setLoggedInUser(currentUserData || { name: 'Admin User', photoURL: null });
 
     } catch (error) {
       console.error("Jey: Error fetching admin data:", error);
       Alert.alert("Error", "Failed to load admin data. Please try again.");
+      setLoggedInUser({ name: 'Admin User', photoURL: null }); // Jey: Set placeholder on error
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []); // Jey: Empty dependency array means this function is created once
 
   useEffect(() => {
-    fetchAdminData();
-  }, []);
+    fetchData();
+  }, [fetchData]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchAdminData();
+    fetchData();
   };
 
   const toggleDriverActivation = async (driverId, currentStatus) => {
@@ -133,7 +133,7 @@ const AdminScreen = ({ navigation }) => {
                 dspUserId: user.id,
               });
 
-              fetchAdminData();
+              fetchData();
               setIsAssignDSPModalVisible(false);
               Alert.alert("Success", `${user.name} has been assigned as the DSP for ${company.name}.`);
             } catch (error) {
@@ -172,7 +172,7 @@ const AdminScreen = ({ navigation }) => {
                 dspUserId: null,
               });
 
-              fetchAdminData();
+              fetchData();
               Alert.alert("Success", `${dspName} has been unassigned from ${company.name}.`);
             } catch (error) {
               console.error("Jey: Error unassigning DSP:", error);
@@ -296,7 +296,6 @@ const AdminScreen = ({ navigation }) => {
     </View>
   );
 
-  // Jey: New render function for the 'More' tab
   const renderMoreTab = () => (
     <ScrollView contentContainerStyle={styles.settingsContent}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
@@ -304,7 +303,7 @@ const AdminScreen = ({ navigation }) => {
       <Text style={styles.settingsTitle}>More Options</Text>
       <TouchableOpacity
         style={styles.settingsCard}
-        onPress={() => navigation.navigate('Settings')} // Jey: Navigate to the new Settings screen
+        onPress={() => navigation.navigate('Settings')}
       >
         <MaterialIcons name="settings" size={24} color="#6BB9F0" />
         <Text style={styles.settingsCardText}>Settings</Text>
@@ -336,7 +335,6 @@ const AdminScreen = ({ navigation }) => {
       case 'companies':
         return (
           <View style={styles.tabContentContainer}>
-            {/* Jey: Container for search and count */}
             <View style={styles.searchAndCountContainer}>
               <TextInput
                 style={styles.searchBar}
@@ -368,7 +366,6 @@ const AdminScreen = ({ navigation }) => {
       case 'drivers':
         return (
           <View style={styles.tabContentContainer}>
-            {/* Jey: Container for search and count */}
             <View style={styles.searchAndCountContainer}>
               <TextInput
                 style={styles.searchBar}
@@ -389,7 +386,7 @@ const AdminScreen = ({ navigation }) => {
             />
           </View>
         );
-      case 'more': // Jey: Changed from 'settings' to 'more'
+      case 'more':
         return renderMoreTab();
       default:
         return null;
@@ -407,7 +404,6 @@ const AdminScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Jey: Updated header with user profile */}
       <View style={styles.header}>
         <View style={styles.headerProfile}>
           {loggedInUser?.photoURL ? (
@@ -417,7 +413,7 @@ const AdminScreen = ({ navigation }) => {
           )}
           <View>
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
-            <Text style={styles.userNameText}>{loggedInUser?.name || 'Admin User'}</Text>
+            <Text style={styles.userName}>{loggedInUser?.name || 'Admin User'}</Text>
           </View>
         </View>
         <TouchableOpacity onPress={handleRefresh} style={styles.refreshIconContainer}>
@@ -430,7 +426,7 @@ const AdminScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.tabContainer}>
-        {['companies', 'drivers', 'more'].map((tab) => ( // Jey: Changed 'settings' to 'more'
+        {['companies', 'drivers', 'more'].map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tabButton, activeTab === tab && styles.activeTab]}
@@ -442,7 +438,7 @@ const AdminScreen = ({ navigation }) => {
             <MaterialIcons
               name={
                 tab === 'companies' ? 'business' :
-                tab === 'drivers' ? 'people' : 'more-horiz' // Jey: Changed icon to 'more-horiz'
+                tab === 'drivers' ? 'people' : 'more-horiz'
               }
               size={24}
               color={activeTab === tab ? '#FF9AA2' : '#666'}
@@ -462,7 +458,7 @@ const AdminScreen = ({ navigation }) => {
         visible={isCompanyModalVisible}
         onClose={() => setIsCompanyModalVisible(false)}
         companyToEdit={companyToEdit}
-        onCompanySaved={fetchAdminData}
+        onCompanySaved={fetchData}
       />
       
       <AssignDSPModal
@@ -497,7 +493,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  // Jey: New styles for the header profile
   headerProfile: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -555,7 +550,6 @@ const styles = StyleSheet.create({
   tabContentContainer: {
     flex: 1,
   },
-  // Jey: ✨ New style for the search and count container
   searchAndCountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -573,7 +567,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginRight: 10,
   },
-  // Jey: ✨ New style for the count text
   countText: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -591,7 +584,6 @@ const styles = StyleSheet.create({
   addCompanyButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 16,
     marginLeft: 10,
   },
   card: {
@@ -634,14 +626,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     marginTop: 15,
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 5,
-    marginLeft: 10,
-  },
   assignButton: {
     backgroundColor: '#6BB9F0',
   },
@@ -653,6 +637,14 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#FF5733',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 5,
+    marginLeft: 10,
   },
   actionButtonText: {
     color: '#fff',
