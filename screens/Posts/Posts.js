@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Modal, Dimensions, Platform, Animated, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, Modal, Dimensions, Platform, Animated, TextInput, KeyboardAvoidingView, ScrollView, Alert } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, FieldValue, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, FieldValue, addDoc, serverTimestamp, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -30,7 +30,7 @@ const MOOD_EMOJIS = [
   { emoji: '💡', name: 'Insightful' },
   { emoji: '🤔', name: 'Thoughtful' },
   { emoji: '💪', name: 'Strong' },
-  { emoji: '🎉', name: 'Celebration' },
+  { emoji: '🎉', 'name': 'Celebration' },
   { emoji: '😢', name: 'Sad' },
   { emoji: '🔥', name: 'Fire' },
 ];
@@ -43,19 +43,16 @@ const Posts = () => {
   const [loading, setLoading] = useState(true);
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
   const [selectedImageUri, setSelectedImageUri] = useState(null);
-  const [currentPostForModal, setCurrentPostForModal] = useState(null); // Holds the entire post object for modal context
+  const [currentPostForModal, setCurrentPostForModal] = useState(null);
   const [comments, setComments] = useState([]);
   const [newCommentText, setNewCommentText] = useState('');
-  const commentsListRef = useRef(null); // Ref for FlatList to scroll to bottom
+  const commentsListRef = useRef(null);
 
-  // Mood Modal States
   const [isMoodPickerVisible, setIsMoodPickerVisible] = useState(false);
   const [currentPostForMood, setCurrentPostForMood] = useState(null);
 
-  // Animation value for the heart icon
   const animatedValue = useRef(new Animated.Value(1)).current;
 
-  // Footer active tab state and logic
   const currentNavigation = useNavigation();
   const [activeTab, setActiveTab] = useState('PostsTab');
 
@@ -76,9 +73,6 @@ const Posts = () => {
 
   const handleTabPress = (tabName) => {
     if (tabName === activeTab) {
-      if (tabName === 'HomeTab') {
-        currentNavigation.navigate('Home');
-      }
       return;
     }
 
@@ -113,7 +107,6 @@ const Posts = () => {
     }
   };
 
-
   useEffect(() => {
     const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
 
@@ -142,22 +135,20 @@ const Posts = () => {
     return () => unsubscribe();
   }, [userData?.uid]);
 
-  // Effect to fetch comments when the image modal opens for a specific post
   useEffect(() => {
     if (isImageModalVisible && currentPostForModal?.id) {
       const commentsQuery = query(
         collection(db, 'posts', currentPostForModal.id, 'comments'),
-        orderBy('createdAt', 'asc') // Order comments by creation time
+        orderBy('createdAt', 'asc')
       );
 
       const unsubscribeComments = onSnapshot(commentsQuery, (snapshot) => {
         const fetchedComments = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() // Convert Firestore Timestamp to Date object
+          createdAt: doc.data().createdAt?.toDate()
         }));
         setComments(fetchedComments);
-        // Scroll to the bottom of the comments list when new comments arrive
         setTimeout(() => {
           commentsListRef.current?.scrollToEnd({ animated: true });
         }, 100);
@@ -167,7 +158,7 @@ const Posts = () => {
 
       return () => unsubscribeComments();
     } else {
-      setComments([]); // Clear comments when modal is closed or no post is selected
+      setComments([]);
     }
   }, [isImageModalVisible, currentPostForModal?.id]);
 
@@ -184,7 +175,6 @@ const Posts = () => {
 
     try {
       if (currentPost.hasLiked) {
-        // Unlike the post
         await updateDoc(postRef, {
           likes: Math.max(0, (currentPost.likes || 1) - 1),
           likedBy: arrayRemove(userData.uid)
@@ -193,9 +183,7 @@ const Posts = () => {
           Animated.timing(animatedValue, { toValue: 0.8, duration: 100, useNativeDriver: true }),
           Animated.spring(animatedValue, { toValue: 1, friction: 3, useNativeDriver: true }),
         ]).start();
-
       } else {
-        // Like the post
         await updateDoc(postRef, {
           likes: (currentPost.likes || 0) + 1,
           likedBy: arrayUnion(userData.uid)
@@ -225,18 +213,16 @@ const Posts = () => {
       const newMoodReactions = { ...currentPostForMood.moodReactions || {} };
 
       if (newMoodReactions[userUid] === emoji) {
-        // If same emoji clicked again, remove reaction
         delete newMoodReactions[userUid];
         updateData[`moodReactions.${userUid}`] = FieldValue.delete();
       } else {
-        // Set or update reaction
         newMoodReactions[userUid] = emoji;
         updateData[`moodReactions.${userUid}`] = emoji;
       }
 
       await updateDoc(postRef, updateData);
-      setIsMoodPickerVisible(false); // Close modal after selection
-      setCurrentPostForMood(null); // Clear selected post
+      setIsMoodPickerVisible(false);
+      setCurrentPostForMood(null);
     } catch (error) {
       console.error('Jey: Error updating mood reaction:', error);
       console.log('Jey: Could not update mood. Please try again.');
@@ -245,16 +231,16 @@ const Posts = () => {
 
   const openImageModal = (imageUri, post) => {
     setSelectedImageUri(imageUri);
-    setCurrentPostForModal(post); // Set the entire post object
+    setCurrentPostForModal(post);
     setIsImageModalVisible(true);
   };
 
   const closeImageModal = () => {
     setIsImageModalVisible(false);
     setSelectedImageUri(null);
-    setCurrentPostForModal(null); // Clear the post object
-    setNewCommentText(''); // Clear comment input
-    setComments([]); // Clear comments state
+    setCurrentPostForModal(null);
+    setNewCommentText('');
+    setComments([]);
   };
 
   const openMoodPicker = (post) => {
@@ -286,7 +272,6 @@ const Posts = () => {
     }
 
     try {
-      // Add comment to the 'comments' subcollection of the current post
       await addDoc(collection(db, 'posts', currentPostForModal.id, 'comments'), {
         userId: userData.uid,
         userName: userData.name || 'Anonymous',
@@ -295,17 +280,54 @@ const Posts = () => {
         createdAt: serverTimestamp(),
       });
 
-      // Increment comments count on the post document
       await updateDoc(doc(db, 'posts', currentPostForModal.id), {
         comments: (currentPostForModal.comments || 0) + 1,
       });
 
-      setNewCommentText(''); // Clear input after sending
-      // The onSnapshot listener for comments will automatically update the list
+      setNewCommentText('');
     } catch (error) {
       console.error('Jey: Error adding comment:', error);
       console.log('Jey: Could not add comment. Please try again.');
     }
+  };
+
+  // Jey: New function to handle post deletion from the modal
+  const handleDeletePost = () => {
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to delete this post? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          onPress: async () => {
+            if (!currentPostForModal?.id) return;
+            try {
+              // Delete comments subcollection first
+              const commentsSnapshot = await getDocs(collection(db, 'posts', currentPostForModal.id, 'comments'));
+              const deletePromises = commentsSnapshot.docs.map(commentDoc => 
+                deleteDoc(doc(db, 'posts', currentPostForModal.id, 'comments', commentDoc.id))
+              );
+              await Promise.all(deletePromises);
+
+              // Delete the main post document
+              await deleteDoc(doc(db, 'posts', currentPostForModal.id));
+              
+              console.log("Jey: Post and its comments deleted successfully.");
+              // Close the modal and navigate back
+              closeImageModal();
+            } catch (error) {
+              console.error("Jey: Error deleting post:", error);
+              Alert.alert("Error", "Failed to delete post. Please try again.");
+            }
+          },
+          style: "destructive"
+        },
+      ]
+    );
   };
 
   const renderCommentItem = ({ item: comment }) => (
@@ -319,7 +341,7 @@ const Posts = () => {
       )}
       <View style={styles.commentContent}>
         <Text style={styles.commentUserName}>
-          {comment.authorName || 'Anonymous User'} {/* MODIFIED LINE HERE */}
+          {comment.authorName || 'Anonymous User'}
         </Text>
         <Text style={styles.commentText}>{comment.text}</Text>
         <Text style={styles.commentTime}>{comment.createdAt ? new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + new Date(comment.createdAt).toLocaleDateString() : 'Just now'}</Text>
@@ -332,121 +354,6 @@ const Posts = () => {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.primaryTeal} />
         <Text style={styles.loadingText}>Loading posts...</Text>
-      </View>
-    );
-  }
-
-  if (posts.length === 0 && !loading) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="documents-outline" size={80} color={Colors.mediumText} />
-        <Text style={styles.emptyText}>No posts yet. Be the first to share an update!</Text>
-        <TouchableOpacity
-          style={styles.newPostButtonEmpty}
-          onPress={() => navigation.navigate('CreatePost')}
-        >
-          <Ionicons name="add" size={30} color={Colors.white} />
-        </TouchableOpacity>
-        <View style={styles.toggleButtonContainer}>
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('HomeTab')}
-          >
-            <Ionicons
-              name="home-outline"
-              size={20}
-              color={activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Home
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('PostsTab')}
-          >
-            <Ionicons
-              name="newspaper-outline"
-              size={20}
-              color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Posts
-            </Text>
-          </TouchableOpacity>
-
-          {userData?.role === 'admin' && (
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => handleTabPress('AdminTab')}
-            >
-              <MaterialIcons
-                name="admin-panel-settings"
-                size={20}
-                color={activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray}
-              />
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray }
-                ]}
-              >
-                Admin
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {userData?.role === 'company' && (
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={() => handleTabPress('CompanyTab')}
-            >
-              <MaterialIcons
-                name="business"
-                size={20}
-                color={activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray}
-              />
-              <Text
-                style={[
-                  styles.toggleButtonText,
-                  { color: activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray }
-                ]}
-              >
-                Company
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('SettingsTab')}
-          >
-            <Ionicons
-              name="settings-outline"
-              size={20}
-              color={activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Settings
-            </Text>
-          </TouchableOpacity>
-        </View>
       </View>
     );
   }
@@ -497,14 +404,6 @@ const Posts = () => {
                   </Animated.View>
                   <Text style={styles.footerText}>{item.likes || 0}</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.footerButton}
-                  onPress={() => navigation.navigate('PostDetails', { post: item })}
-                >
-                  <Ionicons name="chatbubble-outline" size={20} color={Colors.primaryTeal} />
-                  <Text style={styles.footerText}>{item.comments || 0}</Text>
-                </TouchableOpacity>
               </View>
 
               <TouchableOpacity
@@ -522,14 +421,23 @@ const Posts = () => {
           </View>
         )}
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="documents-outline" size={80} color={Colors.mediumText} />
+            <Text style={styles.emptyText}>No posts yet. Be the first to share an update!</Text>
+          </View>
+        )}
       />
 
-      <TouchableOpacity
-        style={styles.newPostButton}
-        onPress={() => navigation.navigate('CreatePost')}
-      >
-        <Ionicons name="add" size={30} color={Colors.white} />
-      </TouchableOpacity>
+      {/* Conditional Floating Button for new post */}
+      {userData?.allowPosts && (
+        <TouchableOpacity
+          style={styles.newPostButton}
+          onPress={() => navigation.navigate('CreatePost')}
+        >
+          <Ionicons name="add" size={30} color={Colors.white} />
+        </TouchableOpacity>
+      )}
 
       {/* Image Modal Component - Updated */}
       <Modal
@@ -545,7 +453,7 @@ const Posts = () => {
           <TouchableOpacity
             style={styles.modalContentWrapper}
             activeOpacity={1}
-            onPress={() => console.log("Jey: Touched modal background but not close button")} // Prevent closing on general touch
+            onPress={() => console.log("Jey: Touched modal background but not close button")}
           >
             {selectedImageUri && (
               <Image
@@ -554,11 +462,16 @@ const Posts = () => {
                 resizeMode="contain"
               />
             )}
+            {/* Jey: Conditional delete icon */}
+            {userData?.uid === currentPostForModal?.authorId && (
+              <TouchableOpacity style={styles.deleteModalButton} onPress={handleDeletePost}>
+                <Ionicons name="trash-outline" size={30} color={Colors.redAccent} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.closeModalButton} onPress={closeImageModal}>
               <Ionicons name="close-circle" size={40} color={Colors.white} />
             </TouchableOpacity>
 
-            {/* Comments Section */}
             <View style={styles.commentsSection}>
               <Text style={styles.commentsTitle}>Comments ({comments.length})</Text>
               {comments.length > 0 ? (
@@ -573,7 +486,6 @@ const Posts = () => {
                 <Text style={styles.noCommentsText}>No comments yet. Be the first to comment!</Text>
               )}
 
-              {/* Comment Input */}
               {userData?.uid ? (
                 <View style={styles.commentInputContainer}>
                   <TextInput
@@ -632,107 +544,117 @@ const Posts = () => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Footer Navigation Buttons */}
-      <View style={styles.toggleButtonContainer}>
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('HomeTab')}
-        >
-          <Ionicons
-            name="home-outline"
-            size={20}
-            color={activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          >
-            Home
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('PostsTab')}
-        >
-          <Ionicons
-            name="newspaper-outline"
-            size={20}
-            color={activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          >
-            Posts
-          </Text>
-        </TouchableOpacity>
-
-        {userData?.role === 'admin' && (
+      {/* Jey: Bottom Tab Bar from HomeWrapper - Now wrapped in conditional rendering */}
+      {!userData?.isDsp && (
+        <View style={styles.toggleButtonContainer}>
           <TouchableOpacity
             style={styles.toggleButton}
-            onPress={() => handleTabPress('AdminTab')}
+            onPress={() => handleTabPress('HomeTab')}
           >
-            <MaterialIcons
-              name="admin-panel-settings"
-              size={20}
-              color={activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray}
+            <Image
+              source={require('../../assets/png/home.png')}
+              style={[
+                styles.bottomTabIconPng,
+                { tintColor: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
+              ]}
             />
             <Text
               style={[
                 styles.toggleButtonText,
-                { color: activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                { color: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
               ]}
             >
-              Admin
+              Home
             </Text>
           </TouchableOpacity>
-        )}
 
-        {userData?.role === 'company' && (
+          {userData?.allowPosts && (
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => handleTabPress('PostsTab')}
+            >
+              <Image
+                source={require('../../assets/png/post.png')}
+                style={[
+                  styles.bottomTabIconPng,
+                  { tintColor: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                ]}
+              />
+              <Text
+                style={[
+                  styles.toggleButtonText,
+                  { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                ]}
+              >
+                Posts
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {userData?.isDsp && (
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => handleTabPress('AdminTab')}
+            >
+              <MaterialIcons
+                name="admin-panel-settings"
+                size={20}
+                color={activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray}
+              />
+              <Text
+                style={[
+                  styles.toggleButtonText,
+                  { color: activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                ]}
+              >
+                Admin
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {userData?.role === 'company' && (
+            <TouchableOpacity
+              style={styles.toggleButton}
+              onPress={() => handleTabPress('CompanyTab')}
+            >
+              <MaterialIcons
+                name="business"
+                size={20}
+                color={activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray}
+              />
+              <Text
+                style={[
+                  styles.toggleButtonText,
+                  { color: activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                ]}
+              >
+                Company
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.toggleButton}
-            onPress={() => handleTabPress('CompanyTab')}
+            onPress={() => handleTabPress('SettingsTab')}
           >
-            <MaterialIcons
-              name="business"
-              size={20}
-              color={activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray}
+            <Image
+              source={require('../../assets/png/settings.png')}
+              style={[
+                styles.bottomTabIconPng,
+                { tintColor: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
+              ]}
             />
             <Text
               style={[
                 styles.toggleButtonText,
-                { color: activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray }
+                { color: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
               ]}
             >
-              Company
+              Settings
             </Text>
           </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('SettingsTab')}
-        >
-          <Ionicons
-            name="settings-outline"
-            size={20}
-            color={activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          >
-            Settings
-          </Text>
-        </TouchableOpacity>
-      </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -885,24 +807,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContentWrapper: {
-    flex: 1, // Take full height
+    flex: 1,
     width: '100%',
-    justifyContent: 'flex-start', // Align content to the top
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 30, // Adjust for status bar/notch
+    paddingTop: Platform.OS === 'ios' ? 60 : 30,
   },
   fullScreenImage: {
-    width: width * 0.9, // Make image a bit smaller to accommodate comments
-    height: height * 0.4, // Adjust height
+    width: width * 0.9,
+    height: height * 0.4,
     borderRadius: 8,
-    marginBottom: 15, // Space between image and comments
+    marginBottom: 15,
+  },
+  deleteModalButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: 10,
+    padding: 5,
+    zIndex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)', // Slightly transparent background for visibility
+    borderRadius: 20,
   },
   closeModalButton: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 50 : 20,
     right: 10,
     padding: 5,
-    zIndex: 1, // Ensure it's above other content
+    zIndex: 1,
   },
   moodPickerOverlay: {
     flex: 1,
@@ -983,14 +914,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginHorizontal: 0,
   },
+  bottomTabIconPng: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
+  },
   toggleButtonText: {
     fontSize: 12,
     fontWeight: '600',
     marginTop: 4,
   },
-  // New Styles for Comments Section in Modal
   commentsSection: {
-    flex: 1, // Allow comments section to take remaining space
+    flex: 1,
     width: '100%',
     backgroundColor: Colors.white,
     borderTopLeftRadius: 15,
@@ -1005,8 +940,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   commentsList: {
-    flexGrow: 1, // Allow FlatList to grow
-    paddingBottom: 10, // Space for the input field below
+    flexGrow: 1,
+    paddingBottom: 10,
   },
   noCommentsText: {
     fontSize: 14,
@@ -1016,7 +951,7 @@ const styles = StyleSheet.create({
   },
   commentItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start', // Align avatar and text to the top
+    alignItems: 'flex-start',
     marginBottom: 10,
     paddingVertical: 5,
     paddingHorizontal: 5,
@@ -1057,7 +992,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.border,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 0, // Extra padding for iOS keyboard
+    paddingBottom: Platform.OS === 'ios' ? 10 : 0,
   },
   commentInput: {
     flex: 1,
@@ -1068,7 +1003,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     fontSize: 15,
     color: Colors.darkText,
-    maxHeight: 100, // Prevent input from growing too large
+    maxHeight: 100,
   },
   sendCommentButton: {
     backgroundColor: Colors.primaryTeal,

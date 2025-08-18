@@ -36,6 +36,7 @@ import PasswordResetConfirmation from './screens/PasswordResetConfirmation';
 import Team from './screens/Team';
 import TeamChat from './screens/TeamChat';
 import FeedBack from './screens/FeedBack';
+import ManagePosts from './screens/ManagePosts';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -219,7 +220,7 @@ export default function App() {
             <Stack.Screen
               name="Team"
               component={Team}
-              options={{ headerShown: true, title: '' }}
+              options={{ headerShown: true, title: 'Team', headerTitleAlign: 'center' }}
             />
             <Stack.Screen
               name="TeamChat"
@@ -236,10 +237,17 @@ export default function App() {
               component={SafetyTips}
               options={{ headerShown: false }}
             />
+
+            <Stack.Screen
+              name="ManagePosts"
+              component={ManagePosts}
+              options={{ headerShown: true, title: 'Manage Post', headerTitleAlign: 'center' }}
+            />
+            
             <Stack.Screen
               name="Posts"
               component={Posts}
-              options={{ headerShown: true, title: 'Posts', headerBackVisible: false ,headerTitleAlign: 'center' }}
+              options={{ headerShown: true, title: 'Posts', headerBackVisible: true ,headerTitleAlign: 'center' }}
             />
             <Stack.Screen
               name="PostDetail"
@@ -303,7 +311,7 @@ export default function App() {
             />
           </Stack.Navigator>
         </NavigationContainer>
-      </GestureHandlerRootView> {/* <--- THIS IS THE CLOSING TAG! */}
+      </GestureHandlerRootView> 
     </AuthProvider>
   );
 }

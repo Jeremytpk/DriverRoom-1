@@ -249,7 +249,7 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleTabPress = (tabName) => {
-    // Jey: If the user is already on the active tab, do nothing
+    // If the user is already on the active tab, do nothing
     if (tabName === activeTab) {
       return;
     }
@@ -743,7 +743,8 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 60000);
+      //////// TIME OUT ///////////////////////////////////////////////////////////////////////////////
+          }, 100000);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);

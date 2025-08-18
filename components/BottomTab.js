@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import Home from '../screens/Home'; // This should be your HomeScreen content
+import Home from '../screens/Home';
 import Posts from '../screens/Posts/Posts';
 import GateCodes from '../screens/GateCodes/GateCodes';
 import Settings from '../screens/Settings';
@@ -12,10 +12,9 @@ import CompanyScreen from '../screens/CompanyScreen';
 
 const Tab = createBottomTabNavigator();
 
-// Define your new color palette based on the logo
 const Colors = {
-  primaryTeal: '#008080', // A standard vibrant teal
-  accentSalmon: '#FA8072', // A standard salmon/coral
+  primaryTeal: '#008080',
+  accentSalmon: '#FA8072',
   lightBackground: '#f8f8f8',
   white: '#FFFFFF',
   darkText: '#333333',
@@ -40,95 +39,35 @@ const CustomTabIcon = ({ icon, label, focused, badgeCount }) => {
 
 export default function BottomTab() {
   const { userData } = useAuth();
-
-  // Example badge counts - replace with your actual data
+  
   const notificationCount = 3;
   const pendingApprovals = userData?.role === 'company' ? 5 : 0;
 
-  return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: Colors.primaryTeal, // Active tab icon color
-        tabBarInactiveTintColor: Colors.mediumText, // Inactive tab icon color
-        tabBarStyle: {
-          backgroundColor: Colors.white, // White background for tab bar
-          borderTopWidth: 0, // Remove default border
-          elevation: 5, // Subtle shadow for Android
-          shadowColor: '#000', // Subtle shadow for iOS
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.05,
-          shadowRadius: 5,
-          height: 70,
-          paddingBottom: 10,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          marginTop: -5,
-        },
-        headerShown: false, // Ensure headers are hidden by default in tabs
-      }}
-    >
-      {/* Home Tab (Chat) */}
-      <Tab.Screen
-        name="Home"
-        component={Home} // This should be your HomeScreen content from HomeWrapper
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <CustomTabIcon
-              icon={<Ionicons
-                name={focused ? 'chatbubbles' : 'chatbubbles-outline'}
-                size={24}
-                color={focused ? Colors.primaryTeal : Colors.mediumText} // Use teal for focused, mediumText for unfocused
-              />}
-              label="Chat"
-              focused={focused}
-              badgeCount={notificationCount}
-            />
-          ),
+  // Jey: Only render the Tab.Navigator for non-DSP users
+  if (userData?.isDsp) {
+    return (
+      <Tab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: Colors.primaryTeal,
+          tabBarInactiveTintColor: Colors.mediumText,
+          tabBarStyle: {
+            backgroundColor: Colors.white,
+            borderTopWidth: 0,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 5,
+            height: 70,
+            paddingBottom: 10,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            marginTop: -5,
+          },
+          headerShown: false,
         }}
-      />
-
-      {/* Posts Tab */}
-      <Tab.Screen
-        name="Posts"
-        component={Posts}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <CustomTabIcon
-              icon={<Ionicons
-                name={focused ? 'image' : 'image-outline'}
-                size={24}
-                color={focused ? Colors.primaryTeal : Colors.mediumText}
-              />}
-              label="Posts"
-              focused={focused}
-            />
-          ),
-        }}
-      />
-
-      {/* Role-Specific Tabs */}
-      {userData?.role === 'admin' && (
-        <Tab.Screen
-          name="Admin"
-          component={AdminScreen}
-          options={{
-            tabBarIcon: ({ focused }) => (
-              <CustomTabIcon
-                icon={<MaterialIcons
-                  name={focused ? 'admin-panel-settings' : 'admin-panel-settings'}
-                  size={24}
-                  color={focused ? Colors.primaryTeal : Colors.mediumText}
-                />}
-                label="Admin"
-                focused={focused}
-              />
-            ),
-          }}
-        />
-      )}
-
-      {userData?.role === 'company' && (
+      >
         <Tab.Screen
           name="Company"
           component={CompanyScreen}
@@ -147,10 +86,125 @@ export default function BottomTab() {
             ),
           }}
         />
+        <Tab.Screen
+          name="Posts"
+          component={Posts}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <CustomTabIcon
+                icon={<Ionicons
+                  name={focused ? 'image' : 'image-outline'}
+                  size={24}
+                  color={focused ? Colors.primaryTeal : Colors.mediumText}
+                />}
+                label="Posts"
+                focused={focused}
+              />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Admin"
+          component={AdminScreen}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <CustomTabIcon
+                icon={<MaterialIcons
+                  name={focused ? 'admin-panel-settings' : 'admin-panel-settings'}
+                  size={24}
+                  color={focused ? Colors.primaryTeal : Colors.mediumText}
+                />}
+                label="Admin"
+                focused={focused}
+              />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={Settings}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <CustomTabIcon
+                icon={<Ionicons
+                  name={focused ? 'settings' : 'settings-outline'}
+                  size={24}
+                  color={focused ? Colors.primaryTeal : Colors.mediumText}
+                />}
+                label="Settings"
+                focused={focused}
+              />
+            ),
+          }}
+        />
+      </Tab.Navigator>
+    );
+  }
+
+  // Jey: Render the full tab bar for all other roles
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        tabBarActiveTintColor: Colors.primaryTeal,
+        tabBarInactiveTintColor: Colors.mediumText,
+        tabBarStyle: {
+          backgroundColor: Colors.white,
+          borderTopWidth: 0,
+          elevation: 5,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 5,
+          height: 70,
+          paddingBottom: 10,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          marginTop: -5,
+        },
+        headerShown: false,
+      }}
+    >
+      <Tab.Screen
+        name="Home"
+        component={Home}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <CustomTabIcon
+              icon={<Ionicons
+                name={focused ? 'chatbubbles' : 'chatbubbles-outline'}
+                size={24}
+                color={focused ? Colors.primaryTeal : Colors.mediumText}
+              />}
+              label="Chat"
+              focused={focused}
+              badgeCount={notificationCount}
+            />
+          ),
+        }}
+      />
+
+      {userData?.allowPosts && (
+        <Tab.Screen
+          name="Posts"
+          component={Posts}
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <CustomTabIcon
+                icon={<Ionicons
+                  name={focused ? 'image' : 'image-outline'}
+                  size={24}
+                  color={focused ? Colors.primaryTeal : Colors.mediumText}
+                />}
+                label="Posts"
+                focused={focused}
+              />
+            ),
+          }}
+        />
       )}
 
-      {/* Gate Codes (for activated drivers) */}
-      {userData?.activated && userData?.role === 'driver' && (
+      {userData?.activated && (userData?.role === 'driver' || userData?.role === 'trainer') && (
         <Tab.Screen
           name="GateCodes"
           component={GateCodes}
@@ -170,7 +224,6 @@ export default function BottomTab() {
         />
       )}
 
-      {/* Settings Tab */}
       <Tab.Screen
         name="Settings"
         component={Settings}
@@ -200,18 +253,18 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 12,
-    color: Colors.mediumText, // Unfocused label color
+    color: Colors.mediumText,
     marginTop: 4,
   },
   tabLabelFocused: {
-    color: Colors.primaryTeal, // Focused label color
+    color: Colors.primaryTeal,
     fontWeight: '600',
   },
   badge: {
     position: 'absolute',
     right: -10,
     top: -5,
-    backgroundColor: Colors.accentSalmon, // Use accent color for badge
+    backgroundColor: Colors.accentSalmon,
     borderRadius: 10,
     width: 20,
     height: 20,

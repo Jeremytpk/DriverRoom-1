@@ -49,13 +49,15 @@ const Team = () => {
   const [isTraineeSearching, setIsTraineeSearching] = useState(false);
   const [selectedTrainee, setSelectedTrainee] = useState(null);
   
-  // Jey: Using a simple string state for the trainee name
   const [traineeNameInput, setTraineeNameInput] = useState('');
 
   const [myTraineeSchedule, setMyTraineeSchedule] = useState([]);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   
   const [selectedTrainingDay, setSelectedTrainingDay] = useState(trainingDays[0]);
+
+  // Jey: New state to track the selected trainer for detailed view
+  const [selectedTrainer, setSelectedTrainer] = useState(null);
 
   useEffect(() => {
     if (!userData?.dspName) return;
@@ -72,7 +74,6 @@ const Team = () => {
       console.error("Jey: Error fetching trainers:", error);
     });
 
-    // Jey: Fetch trainees from the new dedicated 'trainees' collection
     const traineesQuery = query(
       collection(db, 'trainees'),
       where('dspName', '==', userData.dspName)
@@ -174,7 +175,6 @@ const Team = () => {
     }
   };
   
-  // Jey: New function to handle manual trainee addition
   const handleAddTrainee = async () => {
     if (!traineeNameInput.trim()) {
       Alert.alert("Input Required", "Please enter a name for the new trainee.");
@@ -244,7 +244,7 @@ const Team = () => {
         return;
     }
     try {
-      const traineeRef = doc(db, 'trainees', selectedTrainee.id); // Jey: Use 'trainees' collection
+      const traineeRef = doc(db, 'trainees', selectedTrainee.id);
       await updateDoc(traineeRef, {
         assignedTrainerId: trainerId,
         assignedTrainerName: trainerName,
@@ -279,11 +279,57 @@ const Team = () => {
       Alert.alert("Error", "Failed to unassign trainee. Please try again.");
     }
   };
+
+  const handleCompleteTrainingDay = (trainee) => {
+    Alert.alert(
+      "Confirm Completion",
+      `Are you sure you want to mark ${trainee.name}'s ${trainee.trainingDay} as complete?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Complete",
+          onPress: async () => {
+            try {
+              const currentDayNumber = parseInt(trainee.trainingDay.replace('Day ', ''));
+              
+              if (currentDayNumber < 3) {
+                  const nextDay = `Day ${currentDayNumber + 1}`;
+                  const traineeRef = doc(db, 'trainees', trainee.id);
+                  await updateDoc(traineeRef, {
+                    trainingDay: nextDay,
+                  });
+                  Alert.alert("Success", `${trainee.name} is now scheduled for ${nextDay}.`);
+              } else {
+                  const traineeRef = doc(db, 'trainees', trainee.id);
+                  await deleteDoc(traineeRef);
+                  Alert.alert("Success", `${trainee.name} has completed training and been removed from your schedule.`);
+              }
+            } catch (error) {
+              console.error("Jey: Error completing training day:", error);
+              Alert.alert("Error", "Failed to update training status. Please try again.");
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
+
+  // Jey: New function to handle trainer selection for detailed view
+  const handleSelectTrainer = (trainer) => {
+      setSelectedTrainer(prev => prev?.id === trainer.id ? null : trainer);
+  };
   
   const renderTrainerItem = ({ item }) => {
     const isCurrentlyAssigned = selectedTrainee?.assignedTrainerId === item.id;
     return (
-      <View style={styles.trainerCard}>
+      <TouchableOpacity
+        style={[styles.trainerCard, selectedTrainer?.id === item.id && styles.selectedTrainerCard]}
+        onPress={() => handleSelectTrainer(item)}
+      >
         <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
         <View style={styles.trainerInfo}>
           <Text style={styles.trainerName}>{item.name}</Text>
@@ -306,7 +352,7 @@ const Team = () => {
                 </TouchableOpacity>
             )
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
   
@@ -314,7 +360,7 @@ const Team = () => {
     const getDayProgress = (day) => {
       const dayNumber = parseInt(day.replace('Day ', ''));
       const lastCompletedDay = parseInt(item.trainingDay?.replace('Day ', ''));
-      return dayNumber <= lastCompletedDay;
+      return dayNumber >= lastCompletedDay;
     };
   
     return (
@@ -323,7 +369,7 @@ const Team = () => {
           <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
           <View style={styles.cardInfo}>
             <Text style={styles.traineeNameText}>{item.name}</Text>
-            <Text style={styles.traineeAssignedText}>Assigned: {item.assignedTrainerName || 'N/A'}</Text>
+            <Text style={styles.traineeAssignedText}>Currently on: {item.trainingDay || 'N/A'}</Text>
           </View>
         </View>
   
@@ -340,10 +386,79 @@ const Team = () => {
             </View>
           ))}
         </View>
+        
+        {userData?.isTrainer && (
+            <TouchableOpacity
+                style={styles.completeButton}
+                onPress={() => handleCompleteTrainingDay(item)}
+            >
+                <Text style={styles.completeButtonText}>Complete {item.trainingDay}</Text>
+            </TouchableOpacity>
+        )}
       </View>
     );
   };
   
+  const renderDSPTraineeItem = ({ item }) => {
+    const isAssigned = !!item.assignedTrainerId;
+    return (
+      <TouchableOpacity 
+        style={[
+          styles.traineeListItem,
+          isAssigned && styles.traineeListItemAssigned,
+          selectedTrainee?.id === item.id && styles.selectedTraineeListItem,
+        ]}
+        onPress={() => handleSelectTrainee(item)}
+      >
+        <View style={styles.traineeItemContent}>
+            <Text style={styles.traineeListItemText}>{item.name}</Text>
+            {isAssigned ? (
+                <View style={styles.traineeStatus}>
+                    <Text style={styles.traineeStatusText}>Day: {item.trainingDay}</Text>
+                    <Text style={styles.traineeStatusText}>Trainer: {item.assignedTrainerName}</Text>
+                </View>
+            ) : (
+                <Text style={styles.traineeStatusText}>Unassigned</Text>
+            )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  
+  // Jey: New render function for trainees assigned to a specific trainer
+  const renderTrainerTraineeItem = ({ item }) => {
+      const getDayProgress = (day) => {
+          const dayNumber = parseInt(day.replace('Day ', ''));
+          const lastCompletedDay = parseInt(item.trainingDay?.replace('Day ', ''));
+          return dayNumber >= lastCompletedDay;
+      };
+      return (
+          <View style={styles.traineeProgressCard}>
+              <View style={styles.cardHeader}>
+                  <Ionicons name="person-circle-outline" size={30} color={Colors.primaryTeal} />
+                  <View style={styles.cardInfo}>
+                      <Text style={styles.traineeNameText}>{item.name}</Text>
+                      <Text style={styles.traineeAssignedText}>Currently on: {item.trainingDay || 'N/A'}</Text>
+                  </View>
+              </View>
+              <View style={styles.progressContainer}>
+                  {trainingDays.map((day) => (
+                      <View
+                          key={day}
+                          style={[
+                              styles.progressDay,
+                              getDayProgress(day) ? styles.progressDayComplete : styles.progressDayIncomplete,
+                          ]}
+                      >
+                          <Text style={styles.progressDayText}>{day}</Text>
+                      </View>
+                  ))}
+              </View>
+          </View>
+      );
+  };
+
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -361,7 +476,7 @@ const Team = () => {
       <ScrollView contentContainerStyle={styles.teamContainer}>
         {userData?.isTrainer && (
             <View style={styles.scheduleSection}>
-                <Text style={styles.scheduleTitle}>Your Trainee Progress:</Text>
+                <Text style={styles.sectionTitle}>Your Trainee Schedule</Text>
                 {scheduleLoading ? (
                     <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />
                 ) : myTraineeSchedule.length > 0 ? (
@@ -381,63 +496,92 @@ const Team = () => {
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Manage Trainers</Text>
-              <TextInput
-                style={styles.searchBar}
-                placeholder="Search for a driver to promote..."
-                placeholderTextColor={Colors.mediumText}
-                value={trainerSearchQuery}
-                onChangeText={setTrainerSearchQuery}
-                autoCapitalize="none"
-              />
-              {isSearching && <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />}
-              {trainerSearchQuery.length > 2 && searchSuggestions.length > 0 && !searchedDriver && (
-                  <View style={styles.suggestionsContainer}>
-                      {searchSuggestions.map((driver) => (
-                          <TouchableOpacity
-                              key={driver.id}
-                              style={styles.suggestionItem}
-                              onPress={() => {
-                                setSearchedDriver(driver);
-                                setTrainerSearchQuery('');
-                                setSearchSuggestions([]);
-                              }}
-                          >
-                              <Text style={styles.suggestionText}>{driver.name} ({driver.email})</Text>
-                          </TouchableOpacity>
-                      ))}
-                  </View>
-              )}
               
-              {searchedDriver && (
-                <View style={styles.selectedDriverCard}>
-                  <View>
-                    <Text style={styles.selectedDriverName}>{searchedDriver.name}</Text>
-                    <Text style={styles.selectedDriverEmail}>{searchedDriver.email}</Text>
-                    <Text style={styles.selectedDriverRole}>{searchedDriver.isTrainer ? "Current Role: Trainer" : "Current Role: Driver"}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.promoteButton, searchedDriver.isTrainer && styles.demoteButton]}
-                    onPress={searchedDriver.isTrainer ? handleDemoteToDriver : handlePromoteToTrainer}
-                  >
-                    <Text style={styles.promoteButtonText}>
-                      {searchedDriver.isTrainer ? 'Make a Driver' : 'Promote to Trainer'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Current Trainers</Text>
-              {trainers.length > 0 ? (
-                <FlatList
-                  data={trainers}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderTrainerItem}
-                  scrollEnabled={false}
-                />
+              {!selectedTrainer ? (
+                  <>
+                      <TextInput
+                        style={styles.searchBar}
+                        placeholder="Search for a driver to promote..."
+                        placeholderTextColor={Colors.mediumText}
+                        value={trainerSearchQuery}
+                        onChangeText={setTrainerSearchQuery}
+                        autoCapitalize="none"
+                      />
+                      {isSearching && <ActivityIndicator size="small" color={Colors.primaryTeal} style={{marginTop: 10}} />}
+                      {trainerSearchQuery.length > 2 && searchSuggestions.length > 0 && !searchedDriver && (
+                          <View style={styles.suggestionsContainer}>
+                              {searchSuggestions.map((driver) => (
+                                  <TouchableOpacity
+                                      key={driver.id}
+                                      style={styles.suggestionItem}
+                                      onPress={() => {
+                                        setSearchedDriver(driver);
+                                        setTrainerSearchQuery('');
+                                        setSearchSuggestions([]);
+                                      }}
+                                  >
+                                      <Text style={styles.suggestionText}>{driver.name} ({driver.email})</Text>
+                                  </TouchableOpacity>
+                              ))}
+                          </View>
+                      )}
+                      
+                      {searchedDriver && (
+                        <View style={styles.selectedDriverCard}>
+                          <View>
+                            <Text style={styles.selectedDriverName}>{searchedDriver.name}</Text>
+                            <Text style={styles.selectedDriverEmail}>{searchedDriver.email}</Text>
+                            <Text style={styles.selectedDriverRole}>{searchedDriver.isTrainer ? "Current Role: Trainer" : "Current Role: Driver"}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[styles.promoteButton, searchedDriver.isTrainer && styles.demoteButton]}
+                            onPress={searchedDriver.isTrainer ? handleDemoteToDriver : handlePromoteToTrainer}
+                          >
+                            <Text style={styles.promoteButtonText}>
+                              {searchedDriver.isTrainer ? 'Make a Driver' : 'Promote to Trainer'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                      <Text style={styles.subSectionTitle}>Current Trainers</Text>
+                      {trainers.length > 0 ? (
+                        <FlatList
+                          data={trainers}
+                          keyExtractor={(item) => item.id}
+                          renderItem={renderTrainerItem}
+                          scrollEnabled={false}
+                        />
+                      ) : (
+                        <Text style={styles.emptyText}>No trainers found for your DSP.</Text>
+                      )}
+                  </>
               ) : (
-                <Text style={styles.emptyText}>No trainers found for your DSP.</Text>
+                  <View style={styles.selectedTrainerDetails}>
+                      <View style={styles.backButtonContainer}>
+                          <TouchableOpacity onPress={() => setSelectedTrainer(null)} style={styles.backButton}>
+                              <Ionicons name="arrow-back" size={24} color={Colors.primaryTeal} />
+                              <Text style={styles.backButtonText}>Back to Trainers</Text>
+                          </TouchableOpacity>
+                      </View>
+                      <View style={styles.trainerHeader}>
+                          <Ionicons name="person-circle-outline" size={40} color={Colors.primaryTeal} />
+                          <View style={styles.trainerHeaderInfo}>
+                              <Text style={styles.trainerHeaderName}>{selectedTrainer.name}</Text>
+                              <Text style={styles.trainerHeaderRole}>Trainer</Text>
+                          </View>
+                      </View>
+                      <Text style={styles.traineesListTitle}>Assigned Trainees ({trainees.filter(t => t.assignedTrainerId === selectedTrainer.id).length})</Text>
+                      {trainees.filter(t => t.assignedTrainerId === selectedTrainer.id).length > 0 ? (
+                          <FlatList
+                              data={trainees.filter(t => t.assignedTrainerId === selectedTrainer.id)}
+                              keyExtractor={item => item.id}
+                              renderItem={renderTrainerTraineeItem}
+                              scrollEnabled={false}
+                          />
+                      ) : (
+                          <Text style={styles.emptyText}>This trainer currently has no assigned trainees.</Text>
+                      )}
+                  </View>
               )}
             </View>
             
@@ -449,8 +593,8 @@ const Team = () => {
                   style={styles.addTraineeInput}
                   placeholder="Enter new trainee's name"
                   placeholderTextColor={Colors.mediumText}
-                  value={traineeNameInput} // Jey: Correctly bound to traineeNameInput state
-                  onChangeText={setTraineeNameInput} // Jey: Correctly bound to setTraineeNameInput function
+                  value={traineeNameInput}
+                  onChangeText={setTraineeNameInput}
                   autoCapitalize="words"
                 />
                 <TouchableOpacity style={styles.addTraineeButton} onPress={handleAddTrainee}>
@@ -458,29 +602,19 @@ const Team = () => {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.subSectionTitle}>Select an Unassigned Trainee:</Text>
-              {trainees.filter(t => t.assignedTrainerId === null).length > 0 ? (
+              <Text style={styles.subSectionTitle}>Select a Trainee:</Text>
+              {trainees.length > 0 ? (
                 <FlatList
-                  data={trainees.filter(t => t.assignedTrainerId === null)}
+                  data={trainees}
                   keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.traineeListItem,
-                        selectedTrainee?.id === item.id && styles.selectedTraineeListItem,
-                      ]}
-                      onPress={() => handleSelectTrainee(item)}
-                    >
-                      <Text style={styles.traineeListItemText}>{item.name}</Text>
-                    </TouchableOpacity>
-                  )}
+                  renderItem={renderDSPTraineeItem}
                   scrollEnabled={false}
                 />
               ) : (
-                <Text style={styles.emptyText}>All trainees are currently assigned.</Text>
+                <Text style={styles.emptyText}>No trainees found for your DSP.</Text>
               )}
               
-              {selectedTrainee && (
+              {selectedTrainee && !selectedTrainee.assignedTrainerId && (
                 <View style={styles.daySelectionContainer}>
                     <Text style={styles.daySelectionLabel}>Select Training Day:</Text>
                     {trainingDays.map((day) => (
@@ -501,7 +635,7 @@ const Team = () => {
                 </View>
               )}
 
-              {selectedTrainee && (
+              {selectedTrainee && !selectedTrainee.assignedTrainerId && (
                 <View style={styles.assignmentTip}>
                     <Text style={styles.assignmentTipText}>Now select a trainer from the list above to assign this trainee to. Or, unselect the trainee to go back to the full list.</Text>
                 </View>
@@ -511,6 +645,11 @@ const Team = () => {
                 <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteTrainee}>
                   <Text style={styles.deleteButtonText}>Delete Trainee</Text>
                 </TouchableOpacity>
+              )}
+              {selectedTrainee && selectedTrainee.assignedTrainerId && (
+                  <TouchableOpacity style={styles.resetButton} onPress={handleUnassignTrainee}>
+                      <Text style={styles.resetButtonText}>Reset Training</Text>
+                  </TouchableOpacity>
               )}
             </View>
           </>
@@ -642,6 +781,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  selectedTrainerCard: {
+      borderColor: Colors.accentSalmon,
+      borderWidth: 2,
+  },
   trainerInfo: {
     marginLeft: 15,
   },
@@ -676,6 +819,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   deleteButtonText: {
+    color: Colors.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  resetButton: {
+    backgroundColor: Colors.mediumText,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  resetButtonText: {
     color: Colors.white,
     fontWeight: 'bold',
     fontSize: 16,
@@ -765,10 +920,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  traineeListItemAssigned: {
+    borderLeftWidth: 5,
+    borderLeftColor: Colors.primaryTeal,
+  },
+  traineeItemContent: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  traineeStatus: {
+      alignItems: 'flex-end',
+  },
+  traineeStatusText: {
+      fontSize: 12,
+      color: Colors.mediumText,
+  },
   selectedTraineeListItem: {
     backgroundColor: Colors.lightGray,
     borderColor: Colors.primaryTeal,
     borderWidth: 2,
+    borderLeftWidth: 5,
   },
   traineeListItemText: {
     fontSize: 16,
@@ -845,6 +1017,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.white,
   },
+  completeButton: {
+    backgroundColor: Colors.green,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  completeButtonText: {
+    color: Colors.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
   startTrainingButton: {
     backgroundColor: Colors.primaryTeal,
     borderRadius: 8,
@@ -855,6 +1039,55 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  // Jey: New styles for the selected trainer view
+  selectedTrainerDetails: {
+      backgroundColor: Colors.white,
+      borderRadius: 10,
+      padding: 15,
+      marginBottom: 15,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2,
+  },
+  backButtonContainer: {
+      marginBottom: 10,
+  },
+  backButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  backButtonText: {
+      color: Colors.primaryTeal,
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginLeft: 5,
+  },
+  trainerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 10,
+  },
+  trainerHeaderInfo: {
+      marginLeft: 10,
+  },
+  trainerHeaderName: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: Colors.darkText,
+  },
+  trainerHeaderRole: {
+      fontSize: 14,
+      color: Colors.mediumText,
+  },
+  traineesListTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: Colors.darkText,
+      marginTop: 10,
+      marginBottom: 10,
   },
 });
 

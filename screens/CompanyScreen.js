@@ -42,7 +42,6 @@ const CompanyScreen = ({ navigation }) => {
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedDrivers, setSelectedDrivers] = useState(new Set());
 
-  // Jey: Function to update company and all drivers' settings
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
       console.warn("Jey: User data (UID or dspName) not available to update settings.");
@@ -57,7 +56,6 @@ const CompanyScreen = ({ navigation }) => {
       await updateDoc(companyRef, { [field]: value });
       console.log(`Jey: Successfully updated company's ${field} setting to ${value}`);
 
-      // Jey: Update query to target both 'driver' and 'trainer' roles
       const driversQuery = query(
           collection(db, 'users'),
           where('dspName', '==', userData.dspName),
@@ -471,31 +469,41 @@ const CompanyScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            <TouchableOpacity
-              style={styles.teamButton}
-              onPress={() => navigation.navigate('Team')}
-            >
-              <Ionicons name="people-outline" size={24} color="#fff" />
-              <Text style={styles.teamButtonText}>Manage Team</Text>
-            </TouchableOpacity>
-
-            <View style={styles.chatButtonsContainer}>
+            {/* Jey: New Grid Layout for chat-related buttons */}
+            <View style={styles.gridContainer}>
               <TouchableOpacity
-                style={styles.chatButton}
+                style={[styles.gridButton, { backgroundColor: '#FF6347' }]}
+                onPress={() => navigation.navigate('ManagePosts')}
+              >
+                <MaterialIcons name="post-add" size={30} color="#fff" />
+                <Text style={styles.gridButtonText}>Manage Posts</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.gridButton, { backgroundColor: '#4682B4' }]}
+                onPress={() => navigation.navigate('Team')}
+              >
+                <Ionicons name="people-outline" size={30} color="#fff" />
+                <Text style={styles.gridButtonText}>Manage Team</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.gridButton, { backgroundColor: '#32CD32' }]}
                 onPress={() => navigation.navigate('GroupChat')}
               >
                 <Ionicons name="people-circle-outline" size={30} color="#fff" />
-                <Text style={styles.chatButtonText}>Create Group Chat</Text>
+                <Text style={styles.gridButtonText}>Create Group Chat</Text>
               </TouchableOpacity>
-
+              
               <TouchableOpacity
-                style={styles.chatButton}
+                style={[styles.gridButton, { backgroundColor: '#FFD700' }]}
                 onPress={() => navigation.navigate('OneChat')}
               >
-              <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
-                <Text style={styles.chatButtonText}>Start One-on-One Chat</Text>
+                <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
+                <Text style={styles.gridButtonText}>Start One-on-One Chat</Text>
               </TouchableOpacity>
             </View>
+
           </ScrollView>
         );
       case 'more':
@@ -941,55 +949,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  teamButton: {
+  gridContainer: { // Jey: New grid container style
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FF9AA2',
-    borderRadius: 10,
-    paddingVertical: 15,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  teamButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 10,
-  },
-  chatButtonsContainer: {
-    marginTop: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
     flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginTop: 15,
+    marginBottom: 15,
   },
-  chatButton: {
-    backgroundColor: '#FF9AA2',
+  gridButton: { // Jey: New grid button style
+    width: '48%',
     borderRadius: 10,
     paddingVertical: 20,
-    paddingHorizontal: 15,
+    marginBottom: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 8,
-    flex: 1,
-    minWidth: '45%',
-    maxWidth: '48%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
-  chatButtonText: {
+  gridButtonText: { // Jey: New grid button text style
     color: '#fff',
     fontWeight: 'bold',
-    marginTop: 8,
     fontSize: 16,
+    marginTop: 8,
     textAlign: 'center',
   },
   moreContentContainer: {
@@ -1063,4 +1047,3 @@ const styles = StyleSheet.create({
 });
 
 export default CompanyScreen;
-
