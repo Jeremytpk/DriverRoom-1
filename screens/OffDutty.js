@@ -18,6 +18,7 @@ import { auth, db } from '../firebase';
 import lockIcon from '../assets/png/lock.png';
 import refreshIcon from '../assets/png/refresh.png';
 import logoutIcon from '../assets/png/logout.png'; // Jey: Import logout icon
+import { ScrollView } from 'react-native-gesture-handler';
 
 const OffDutty = () => {
     const navigation = useNavigation();
@@ -108,6 +109,7 @@ const OffDutty = () => {
     };
 
     return (
+        <ScrollView>
         <View style={styles.container}>
             <Image
                 source={require('../assets/relaxing.png')}
@@ -154,6 +156,7 @@ const OffDutty = () => {
                 <Text style={styles.logoutButtonText}>Logout</Text>
             </TouchableOpacity>
         </View>
+        </ScrollView>
     );
 };
 
