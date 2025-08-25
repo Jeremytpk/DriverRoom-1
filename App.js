@@ -42,6 +42,8 @@ import CompanyDetailScreen from './screens/CompanyDetail';
 import GateCodeDetail from './screens/GateCodes/GateCodeDetail';
 import UpgradeModal from './components/UpgradeModal';
 import RescueModal from './components/RescueModal';
+import ReturnsModal from './components/ReturnsModal';
+import ReturnsDetail from './screens/ReturnsDetail';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -244,6 +246,16 @@ export default function App() {
             <Stack.Screen
               name="RescueModal"
               component={RescueModal}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ReturnsModal"
+              component={ReturnsModal}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ReturnsDetail"
+              component={ReturnsDetail}
               options={{ headerShown: false }}
             />
             <Stack.Screen

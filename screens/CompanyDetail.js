@@ -21,6 +21,9 @@ const CompanyDetailScreen = ({ route, navigation }) => {
   const [isCompanyModalVisible, setIsCompanyModalVisible] = useState(false);
   const [isAssignDSPModalVisible, setIsAssignDSPModalVisible] = useState(false);
   const [isUpgradeModalVisible, setIsUpgradeModalVisible] = useState(false);
+  // Jey: New state for the company plan
+  const [companyPlan, setCompanyPlan] = useState(null);
+
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -29,6 +32,8 @@ const CompanyDetailScreen = ({ route, navigation }) => {
       if (companyDoc.exists()) {
         const companyData = { id: companyDoc.id, ...companyDoc.data() };
         setCompany(companyData);
+        // Jey: Set the company plan from the fetched data
+        setCompanyPlan(companyData.plan || 'Essentials');
 
         const [usersSnapshot, driversSnapshot] = await Promise.all([
           getDocs(collection(db, 'users')),
@@ -66,23 +71,24 @@ const CompanyDetailScreen = ({ route, navigation }) => {
 
   const handleUpgrade = async (plan) => {
   try {
-    // Jey: Get a reference to both the company document AND the user document
     const companyRef = doc(db, 'companies', companyId);
     const companyDoc = await getDoc(companyRef);
     const companyData = companyDoc.data();
     
-    // Jey: Get the dspUserId from the company document
-    const dspUserId = companyData.dspUserId;
-    const userRef = doc(db, 'users', dspUserId);
+    // Check if the dspUserId exists before trying to create a reference
+    if (!companyData.dspUserId) {
+        throw new Error("DSP Admin not assigned to this company.");
+    }
+    
+    const userRef = doc(db, 'users', companyData.dspUserId);
 
-    // Jey: Use a batched write to ensure both documents are updated atomically
     const batch = writeBatch(db);
     batch.update(companyRef, { plan: plan });
     batch.update(userRef, { plan: plan });
     await batch.commit();
 
     Alert.alert("Success", `Company plan updated to ${plan}.`);
-    fetchData(); // Refresh the data to show the changes
+    fetchData();
   } catch (error) {
     console.error("Jey: Error updating company plan:", error);
     Alert.alert("Error", "Failed to update company plan. Please try again.");
@@ -267,6 +273,14 @@ const CompanyDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
         
+        {/* Jey: The new subscription plan card */}
+        {companyPlan && (
+            <View style={companyDetailStyles.planCard}>
+                <Text style={companyDetailStyles.planTitle}>Subscription Plan</Text>
+                <Text style={companyDetailStyles.planValue}>{companyPlan}</Text>
+            </View>
+        )}
+        
         <View style={companyDetailStyles.buttonContainer}>
           <TouchableOpacity onPress={handleOpenCompanyModal} style={[companyDetailStyles.actionButton, companyDetailStyles.editButton]}>
             <MaterialIcons name="edit" size={20} color="#fff" />
@@ -425,6 +439,31 @@ const companyDetailStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
+  },
+  planCard: {
+    backgroundColor: '#e6f3ff', // Light blue background
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#b3e0ff',
+  },
+  planTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 5,
+  },
+  planValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#6BB9F0',
   },
   buttonContainer: {
     flexDirection: 'row',

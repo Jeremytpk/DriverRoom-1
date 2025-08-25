@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
-  TextInput, Alert, Image, ScrollView, RefreshControl
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  ActivityIndicator, Alert, Image, ScrollView, RefreshControl, TextInput
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -206,18 +206,37 @@ const AdminScreen = ({ navigation }) => {
     navigation.navigate('CompanyDetail', { companyId });
   };
 
+  const getPlanColor = (plan) => {
+    switch (plan) {
+      case 'Essentials':
+        return '#3498db';
+      case 'Professional':
+        return '#2ecc71';
+      case 'Executive':
+        return '#9b59b6';
+      default:
+        return '#ccc';
+    }
+  };
+
   const renderCompanyItem = ({ item }) => {
-    // Jey: FIX - Filter out the DSP admin from the driver count.
     const companyDrivers = allUsers.filter(user => user.dspName === item.name && user.role === 'driver');
     const activeDriverCount = companyDrivers.filter(d => d.activated).length;
     const isDSPAssigned = !!item.dspUserId;
     const assignedDSP = isDSPAssigned ? allUsers.find(user => user.id === item.dspUserId) : null;
+    const plan = item.plan || 'Essentials';
+    const planColor = getPlanColor(plan);
 
     return (
       <TouchableOpacity onPress={() => navigateToCompanyDetail(item.id)} style={styles.card}>
         <View style={styles.cardHeader}>
-          <MaterialIcons name="business" size={24} color="#6BB9F0" />
-          <Text style={styles.cardTitle}>{item.name || 'No Name'}</Text>
+          <View style={styles.cardHeaderLeft}>
+            <MaterialIcons name="business" size={24} color="#6BB9F0" />
+            <Text style={styles.cardTitle}>{item.name || 'No Name'}</Text>
+          </View>
+          <View style={[styles.planLabel, { backgroundColor: planColor }]}>
+            <Text style={styles.planLabelText}>{plan}</Text>
+          </View>
         </View>
         <View style={styles.cardRow}>
           <Text style={styles.cardLabel}>DSP Admin:</Text>
@@ -567,12 +586,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
+    justifyContent: 'space-between',
+  },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#6BB9F0',
     marginLeft: 10,
+  },
+  planLabel: {
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  planLabelText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   cardRow: {
     flexDirection: 'row',

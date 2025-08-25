@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator,
-  Image, Modal, TextInput, KeyboardAvoidingView, Platform, Alert
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, 
+  TouchableOpacity, ActivityIndicator, Alert, 
+  TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -93,19 +92,27 @@ const GroupChat = ({ navigation }) => {
     return () => unsubscribe();
   }, [currentUser?.uid, userData?.email]);
 
-  // Effect to fetch all users for member selection in the modal
+  // Jey: Updated effect to fetch only users related to the current DSP
   useEffect(() => {
-    if (!isModalVisible) return;
+    if (!isModalVisible || !userData?.dspName) return;
 
     const fetchAllUsers = async () => {
       setLoadingUsers(true);
       try {
         const db = getFirestore();
         const usersRef = collection(db, 'users');
-        const q = query(usersRef);
+        
+        // Jey: Filter users by dspName
+        const q = query(
+          usersRef,
+          where('dspName', '==', userData.dspName),
+          where('role', 'in', ['driver', 'trainer']) // Fetch only drivers and trainers
+        );
+        
         const querySnapshot = await getDocs(q);
         const users = querySnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
+          // Jey: Still filter out the current user, who is a DSP admin
           .filter(user => user.id !== currentUser.uid);
 
         setAllUsers(users);
@@ -118,7 +125,7 @@ const GroupChat = ({ navigation }) => {
     };
 
     fetchAllUsers();
-  }, [isModalVisible, currentUser?.uid]);
+  }, [isModalVisible, currentUser?.uid, userData?.dspName]); // Jey: Added userData.dspName to dependency array
 
   // Function to handle picking an image for the group photo
   const pickImage = async () => {
@@ -216,25 +223,21 @@ const GroupChat = ({ navigation }) => {
       const allMembersUids = [currentUser.uid, ...selectedMembers.map(m => m.id)];
       const allMembersEmails = [userData.email, ...selectedMembers.map(m => m.email)]; // Jey: Also collect emails for 'participants' field
 
-      // Jey: When creating a new group, explicitly set 'isGroup: true'
-      // This is vital for the unread message count logic in AuthContext.
       const newGroupRef = await addDoc(groupsRef, {
         name: groupName.trim(),
         photoURL: photoURL,
-        members: allMembersUids, // Store UIDs for member management
-        participants: allMembersEmails, // Jey: Store emails for chat query in AuthContext
+        members: allMembersUids,
+        participants: allMembersEmails,
         createdAt: serverTimestamp(),
         createdBy: currentUser.uid,
-        isGroup: true, // Jey: IMPORTANT: Mark this as a group chat for AuthContext
-        lastMessage: { // Jey: Initialize with a dummy last message to enable unread tracking
+        isGroup: true,
+        lastMessage: {
           text: 'Group created!',
           sender: currentUser.email,
           createdAt: serverTimestamp(),
         }
       });
 
-      // Jey: Mark the newly created group as read for the current user
-      // This prevents the current user from seeing their own newly created group as unread.
       const userChatDocRef = doc(db, 'userChats', currentUser.uid, 'chats', newGroupRef.id);
       await setDoc(userChatDocRef, {
         lastReadMessageTimestamp: serverTimestamp(),
@@ -308,7 +311,7 @@ const GroupChat = ({ navigation }) => {
       ) : groups.length === 0 ? (
         <View style={styles.emptyStateContainer}>
           <Ionicons name="people-outline" size={80} color={Colors.mediumText} />
-          <Text style={styles.emptyStateText}>No groups found.</Text> {/* Jey: Adjusted text */}
+          <Text style={styles.emptyStateText}>No groups found.</Text>
           <Text style={styles.emptyStateSubText}>Your created groups will appear here.</Text>
         </View>
       ) : (
@@ -737,3 +740,4 @@ const styles = StyleSheet.create({
 });
 
 export default GroupChat;
+

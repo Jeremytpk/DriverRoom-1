@@ -43,6 +43,7 @@ const CompanyScreen = ({ navigation }) => {
   const [selectedDrivers, setSelectedDrivers] = useState(new Set());
   
   const [companyPlan, setCompanyPlan] = useState('Essentials');
+  const [companyLogoUrl, setCompanyLogoUrl] = useState(null);
 
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
@@ -238,6 +239,24 @@ const CompanyScreen = ({ navigation }) => {
 
     return () => unsubscribe();
   }, [userData?.uid]);
+  
+  useEffect(() => {
+    if (!userData?.dspName) return;
+    
+    const companiesQuery = query(
+      collection(db, 'companies'),
+      where('name', '==', userData.dspName)
+    );
+    
+    const unsubscribe = onSnapshot(companiesQuery, (snapshot) => {
+      if (!snapshot.empty) {
+        const companyData = snapshot.docs[0].data();
+        setCompanyLogoUrl(companyData.logoUrl || null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [userData?.dspName]);
 
   useEffect(() => {
     fetchCompanyData();
@@ -604,12 +623,18 @@ const CompanyScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {userData?.profilePhotoURL ? (
+        {/* Jey: Use companyLogoUrl if available, otherwise fallback to userData.profilePhotoURL */}
+        {companyLogoUrl ? (
+          <Image source={{ uri: companyLogoUrl }} style={styles.companyLogo} />
+        ) : userData?.profilePhotoURL ? (
           <Image source={{ uri: userData.profilePhotoURL }} style={styles.companyLogo} />
         ) : (
           <MaterialIcons name="business" size={30} color="#6BB9F0" style={styles.companyLogoPlaceholder} />
         )}
-        <Text style={styles.headerTitle}>{userData.dspName} Dashboard</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{userData.dspName} Dashboard</Text>
+          <Text style={styles.planLabel}>{companyPlan}</Text>
+        </View>
         <TouchableOpacity onPress={handleRefresh} style={styles.refreshIconContainer}>
           {refreshing ? (
             <ActivityIndicator size="small" color="#6BB9F0" />
@@ -708,12 +733,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  headerTitleContainer: {
+    flex: 1,
+    marginLeft: 10,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#6BB9F0',
-    flex: 1,
-    marginLeft: 10,
+  },
+  planLabel: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 2,
   },
   companyLogo: {
     width: 40,

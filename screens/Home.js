@@ -13,12 +13,13 @@ import OneChat from './Chat/OneChat';
 import OneConversation from './Chat/OneConversation';
 import NewChatModal from '../screens/Chat/NewChatModal';
 import GateCodes from './GateCodes/GateCodes';
-import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, getFirestore, collection, getDocs, orderBy, query, where, onSnapshot, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import OffDutty from '../screens/OffDutty';
 import Team from '../screens/Team';
 import TeamChat from '../screens/TeamChat';
+import ReturnsModal from '../components/ReturnsModal';
 
 const Stack = createStackNavigator();
 
@@ -38,7 +39,6 @@ const Colors = {
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// --- Extracted DriverProfileHeader Component ---
 const DriverProfileHeader = ({ userData }) => (
   <View style={styles.driverProfileSection}>
     <View style={styles.avatarContainer}>
@@ -81,6 +81,7 @@ const HomeScreen = ({ navigation }) => {
   const currentNavigation = useNavigation();
   const route = useRoute();
   const [activeTab, setActiveTab] = useState('HomeTab');
+  const [isReturnsModalVisible, setIsReturnsModalVisible] = useState(false);
 
   useEffect(() => {
     const currentRouteName = route.name;
@@ -249,7 +250,6 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const handleTabPress = (tabName) => {
-    // If the user is already on the active tab, do nothing
     if (tabName === activeTab) {
       return;
     }
@@ -316,6 +316,29 @@ const HomeScreen = ({ navigation }) => {
       console.error("Jey: Error checking out:", error);
       Alert.alert("Error", "Failed to check out. Please try again.");
     }
+  };
+
+  const handleLogRouteCompletion = async (returnsData) => {
+      try {
+          const db = getFirestore();
+          const returnsRef = collection(db, 'returns');
+          
+          await addDoc(returnsRef, {
+              driverId: userData.uid,
+              driverName: userData.name,
+              dspName: userData.dspName,
+              ...returnsData,
+              timestamp: serverTimestamp(),
+          });
+          
+          // Jey: No duty status change here
+          
+          Alert.alert("Success", "Route completion and returns logged successfully!");
+      } catch (error) {
+          console.error("Jey: Error logging route completion:", error);
+          Alert.alert("Error", "Failed to log route completion. Please try again.");
+          throw error;
+      }
   };
 
   return (
@@ -481,6 +504,15 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      {(userData?.role === 'driver' || userData?.role === 'trainer') && isCheckedIn && (
+        <TouchableOpacity
+          style={styles.floatingReturnsButton}
+          onPress={() => setIsReturnsModalVisible(true)}
+        >
+          <MaterialIcons name="done-all" size={30} color={Colors.white} />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.toggleButtonContainer}>
         <TouchableOpacity
@@ -595,6 +627,12 @@ const HomeScreen = ({ navigation }) => {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         navigation={navigation}
+      />
+      
+      <ReturnsModal
+        visible={isReturnsModalVisible}
+        onClose={() => setIsReturnsModalVisible(false)}
+        onLogReturns={handleLogRouteCompletion}
       />
     </View>
   );
@@ -713,7 +751,6 @@ const HomeWrapper = () => {
       checkUserRole();
       
       return () => {
-        // Cleanup if needed
       };
     }, [userData?.uid, setUserData])
   );
@@ -743,9 +780,6 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-
-
-      //////// TIME OUT /////////////////////////////////////////////////////////////////////////
           }, 600000);
         } else {
           if (fixedTimerRef.current) {
@@ -758,7 +792,7 @@ const HomeWrapper = () => {
       }
     }, (error) => {
       console.error("Jey: Error listening to user's isOnDutty status:", error);
-      setLocalIsOnDutyOrTrainerStatus(false);
+      setLocalIsOnDuttyOrTrainerStatus(false);
     });
 
     return () => {
@@ -1318,6 +1352,23 @@ const styles = StyleSheet.create({
     resizeMode: 'contain',
     tintColor: Colors.white,
   },
+  floatingReturnsButton: {
+    position: 'absolute',
+    bottom: 90,
+    left: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.accentSalmon,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
 });
 
 export default HomeWrapper;
+
