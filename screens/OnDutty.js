@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import RescueModal from '../components/RescueModal';
 
 const OnDutty = () => {
     const { userData } = useAuth();
@@ -15,6 +16,9 @@ const OnDutty = () => {
     const [checkedInCount, setCheckedInCount] = useState(0);
 
     const checkIntervalRef = useRef(null);
+    const [isRescueModalVisible, setIsRescueModalVisible] = useState(false);
+    const [selectedUserForRescue, setSelectedUserForRescue] = useState(null);
+    const [allDrivers, setAllDrivers] = useState([]);
 
     const autoSwitchToOffDuty = async (userId, userName) => {
         try {
@@ -36,10 +40,16 @@ const OnDutty = () => {
         const onDutyQuery = query(
             collection(db, 'users'),
             where('dspName', '==', userData.dspName),
-            where('role', 'in', ['driver', 'trainer']), // Fetch both drivers and trainers
+            where('role', 'in', ['driver', 'trainer']),
             where('isOnDutty', '==', true)
         );
-
+        
+        const allDriversQuery = query(
+            collection(db, 'users'),
+            where('dspName', '==', userData.dspName),
+            where('role', 'in', ['driver', 'trainer'])
+        );
+        
         const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
             const usersList = snapshot.docs.map(doc => ({
                 id: doc.id,
@@ -50,21 +60,18 @@ const OnDutty = () => {
             setCheckedInCount(count);
 
             const sortedUsers = usersList.sort((a, b) => {
-                // Prioritize checked-in users at the top
                 if (a.isCheckedIn && !b.isCheckedIn) {
                     return -1;
                 }
                 if (!a.isCheckedIn && b.isCheckedIn) {
                     return 1;
                 }
-                // Then sort by role (trainers before drivers)
                 if (a.role === 'trainer' && b.role === 'driver') {
                     return -1;
                 }
                 if (a.role === 'driver' && b.role === 'trainer') {
                     return 1;
                 }
-                // Finally, sort alphabetically by name
                 return a.name.localeCompare(b.name);
             });
             
@@ -76,8 +83,17 @@ const OnDutty = () => {
             setLoading(false);
         });
 
+        const unsubscribeAllDrivers = onSnapshot(allDriversQuery, (snapshot) => {
+            const allDriversList = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setAllDrivers(allDriversList);
+        });
+
         return () => {
             unsubscribe();
+            unsubscribeAllDrivers();
         };
     }, [userData?.dspName]);
 
@@ -92,7 +108,6 @@ const OnDutty = () => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', userId);
-                            // Jey: Automatically check out the user when they are removed from on-duty
                             await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
                             Alert.alert("Success", `${userName} has been moved to Off-Duty.`);
                             setSelectedUsers(prev => {
@@ -145,7 +160,6 @@ const OnDutty = () => {
                         try {
                             const updates = Array.from(selectedUsers).map(async (userId) => {
                                 const userRef = doc(db, 'users', userId);
-                                // Jey: Also check out all mass-removed users
                                 await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
                             });
                             await Promise.all(updates);
@@ -162,56 +176,93 @@ const OnDutty = () => {
             { cancelable: true }
         );
     };
-
+    
+    const handleDispatchRescue = async (rescueInitiator, rescuee, rescueAddress) => {
+      console.log(`Jey: Dispatching ${rescueInitiator.name} to rescue ${rescuee.name} at ${rescueAddress}`);
+      Alert.alert(
+        "Rescue Dispatched", 
+        `${rescueInitiator.name} is now en route to rescue ${rescuee.name} at ${rescueAddress}.`
+      );
+    };
+    
     const filteredUsers = onDutyUsers.filter(user =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-
+    
     const renderUserItem = ({ item }) => {
         const isSelected = selectedUsers.has(item.id);
         const isTrainer = item.role === 'trainer';
+        
+        // Jey: Corrected to handle the null state
+        const isSelectedForRescue = selectedUserForRescue && selectedUserForRescue.id === item.id;
+        
+        const handleCardPress = () => {
+          if (userData?.plan === 'Executive') {
+            // Jey: If the same user is selected, deselect them. Otherwise, select the new user.
+            setSelectedUserForRescue(isSelectedForRescue ? null : item);
+          }
+        };
 
         return (
-            <TouchableOpacity onPress={() => handleToggleSelect(item.id)} style={styles.userCard}>
-                <View style={styles.userInfo}>
-                    <Ionicons
-                        name={isSelected ? "checkbox-outline" : "square-outline"}
-                        size={24}
-                        color={isSelected ? "#6BB9F0" : "#999"}
-                        style={{ marginRight: 10 }}
-                    />
-                    <Ionicons name="person-circle-outline" size={40} color={isTrainer ? "#FFC107" : "#6BB9F0"} />
-                    <View style={styles.userNameContainer}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={styles.userName}>{item.name}</Text>
-                            {isTrainer && (
-                                <View style={styles.trainerLabel}>
-                                    <Text style={styles.trainerLabelText}>Trainer</Text>
-                                </View>
+            <View>
+                <TouchableOpacity
+                    onPress={handleCardPress}
+                    style={[
+                        styles.userCard,
+                        isSelectedForRescue && styles.selectedCardForRescue
+                    ]}
+                >
+                    <View style={styles.userInfo}>
+                        <Ionicons
+                            name={isSelected ? "checkbox-outline" : "square-outline"}
+                            size={24}
+                            color={isSelected ? "#6BB9F0" : "#999"}
+                            style={{ marginRight: 10 }}
+                        />
+                        <Ionicons name="person-circle-outline" size={40} color={isTrainer ? "#FFC107" : "#6BB9F0"} />
+                        <View style={styles.userNameContainer}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={styles.userName}>{item.name}</Text>
+                                {isTrainer && (
+                                    <View style={styles.trainerLabel}>
+                                        <Text style={styles.trainerLabelText}>Trainer</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={styles.userEmail}>{item.email}</Text>
+                            {item.onDutySince && (
+                                <Text style={styles.onDutySinceText}>
+                                    On-duty since: {item.onDutySince.toDate().toLocaleTimeString()}
+                                </Text>
                             )}
                         </View>
-                        <Text style={styles.userEmail}>{item.email}</Text>
-                        {item.onDutySince && (
-                            <Text style={styles.onDutySinceText}>
-                                On-duty since: {item.onDutySince.toDate().toLocaleTimeString()}
-                            </Text>
-                        )}
                     </View>
-                </View>
-                <View style={styles.actionButtons}>
-                    {item.isCheckedIn && (
-                        <View style={styles.checkedInIcon}>
-                            <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
-                        </View>
-                    )}
-                    <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
-                    >
-                        <Ionicons name="car-outline" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </View>
-            </TouchableOpacity>
+                    <View style={styles.actionButtons}>
+                        {item.isCheckedIn && (
+                            <View style={styles.checkedInIcon}>
+                                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                            </View>
+                        )}
+                        <TouchableOpacity
+                            style={styles.removeButton}
+                            onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
+                        >
+                            <Ionicons name="car-outline" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+                 {userData?.plan === 'Executive' && isSelectedForRescue && (
+                    <View style={styles.rescueActionContainer}>
+                        <TouchableOpacity 
+                            style={styles.rescueButton}
+                            onPress={() => setIsRescueModalVisible(true)}
+                        >
+                            <Ionicons name="help-circle-outline" size={20} color="#fff" />
+                            <Text style={styles.rescueButtonText}>Dispatch Rescue</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </View>
         );
     };
 
@@ -267,6 +318,13 @@ const OnDutty = () => {
                     </View>
                 )}
                 contentContainerStyle={styles.listContent}
+            />
+            <RescueModal
+                visible={isRescueModalVisible}
+                onClose={() => setIsRescueModalVisible(false)}
+                onDispatch={handleDispatchRescue}
+                allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
+                rescueInitiator={selectedUserForRescue}
             />
         </View>
     );
@@ -353,6 +411,9 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 2,
     },
+    selectedCardForRescue: {
+        backgroundColor: '#e0f2f7',
+    },
     userInfo: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -408,9 +469,8 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 10,
     },
-    // New styles for the Trainer label
     trainerLabel: {
-        backgroundColor: '#FFC107', // A nice, visible color for the label
+        backgroundColor: '#FFC107',
         borderRadius: 5,
         paddingHorizontal: 6,
         paddingVertical: 2,
@@ -420,6 +480,28 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: 'bold',
         color: '#fff',
+    },
+    rescueActionContainer: {
+        backgroundColor: '#6BB9F0',
+        padding: 15,
+        marginBottom: 10,
+        borderRadius: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    rescueButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    rescueButtonText: {
+        marginLeft: 10,
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 16,
     },
 });
 

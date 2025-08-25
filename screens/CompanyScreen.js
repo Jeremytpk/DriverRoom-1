@@ -41,6 +41,8 @@ const CompanyScreen = ({ navigation }) => {
 
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedDrivers, setSelectedDrivers] = useState(new Set());
+  
+  const [companyPlan, setCompanyPlan] = useState('Essentials');
 
   const updateSettingsAndDrivers = useCallback(async (field, value) => {
     if (!userData?.uid || !userData?.dspName) {
@@ -191,14 +193,6 @@ const CompanyScreen = ({ navigation }) => {
       const fetchedSafetyTips = safetyTipsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSafetyTipsCount(fetchedSafetyTips.length);
       setInitialSafetyTips(fetchedSafetyTips);
-
-      const companyRef = doc(db, 'users', userData.uid);
-      const companyDoc = await getDoc(companyRef);
-      if (companyDoc.exists()) {
-        const settingsData = companyDoc.data();
-        setAllowChat(settingsData.allowChat ?? true);
-        setAllowPosts(settingsData.allowPosts ?? true);
-      }
     } catch (error) {
       console.error("Jey: Error fetching company data:", error);
       Alert.alert("Error", "Failed to load data. Please try again.");
@@ -228,6 +222,22 @@ const CompanyScreen = ({ navigation }) => {
 
     return () => unsubscribe();
   }, [userData?.dspName]);
+
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const userRef = doc(db, 'users', userData.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const settingsData = docSnap.data();
+        setCompanyPlan(settingsData.plan || 'Essentials');
+        setAllowChat(settingsData.allowChat ?? true);
+        setAllowPosts(settingsData.allowPosts ?? true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [userData?.uid]);
 
   useEffect(() => {
     fetchCompanyData();
@@ -469,79 +479,88 @@ const CompanyScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             
-            {/* Jey: New Grid Layout for chat-related buttons */}
-            <View style={styles.gridContainer}>
-              <TouchableOpacity
-                style={[styles.gridButton, { backgroundColor: '#FF6347' }]}
-                onPress={() => navigation.navigate('ManagePosts')}
-              >
-                <MaterialIcons name="post-add" size={30} color="#fff" />
-                <Text style={styles.gridButtonText}>Manage Posts</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.gridButton, { backgroundColor: '#4682B4' }]}
-                onPress={() => navigation.navigate('Team')}
-              >
-                <Ionicons name="people-outline" size={30} color="#fff" />
-                <Text style={styles.gridButtonText}>Manage Team</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.gridButton, { backgroundColor: '#32CD32' }]}
-                onPress={() => navigation.navigate('GroupChat')}
-              >
-                <Ionicons name="people-circle-outline" size={30} color="#fff" />
-                <Text style={styles.gridButtonText}>Create Group Chat</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.gridButton, { backgroundColor: '#FFD700' }]}
-                onPress={() => navigation.navigate('OneChat')}
-              >
-                <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
-                <Text style={styles.gridButtonText}>Start One-on-One Chat</Text>
-              </TouchableOpacity>
-            </View>
+            {(companyPlan === 'Professional' || companyPlan === 'Executive') && (
+              <View style={styles.gridContainer}>
+                {companyPlan === 'Executive' && (
+                  <TouchableOpacity
+                    style={[styles.gridButton, { backgroundColor: '#FF6347' }]}
+                    onPress={() => navigation.navigate('ManagePosts')}
+                  >
+                    <MaterialIcons name="post-add" size={30} color="#fff" />
+                    <Text style={styles.gridButtonText}>Manage Posts</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {companyPlan === 'Executive' && (
+                  <TouchableOpacity
+                    style={[styles.gridButton, { backgroundColor: '#4682B4' }]}
+                    onPress={() => navigation.navigate('Team')}
+                  >
+                    <Ionicons name="people-outline" size={30} color="#fff" />
+                    <Text style={styles.gridButtonText}>Manage Team</Text>
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity
+                  style={[styles.gridButton, { backgroundColor: '#32CD32' }]}
+                  onPress={() => navigation.navigate('GroupChat')}
+                >
+                  <Ionicons name="people-circle-outline" size={30} color="#fff" />
+                  <Text style={styles.gridButtonText}>Create Group Chat</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.gridButton, { backgroundColor: '#FFD700' }]}
+                  onPress={() => navigation.navigate('OneChat')}
+                >
+                  <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
+                  <Text style={styles.gridButtonText}>Start One-on-One Chat</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
           </ScrollView>
         );
       case 'more':
         return (
           <ScrollView contentContainerStyle={styles.moreContentContainer}>
-            <View style={styles.moreOptionButton}>
-              <View style={styles.moreOptionTextContainer}>
-                <MaterialIcons name="chat" size={24} color="#6BB9F0" />
-                <Text style={styles.moreOptionText}>Allow Chat</Text>
-              </View>
-              {settingsLoading ? (
-                <ActivityIndicator size="small" color="#6BB9F0" />
-              ) : (
-                <Switch
-                  onValueChange={toggleAllowChat}
-                  value={allowChat}
-                  trackColor={{ false: "#767577", true: "#FF9AA2" }}
-                  thumbColor={allowChat ? "#fff" : "#f4f3f4"}
-                />
-              )}
-            </View>
+            {(companyPlan === 'Professional' || companyPlan === 'Executive') && (
+              <>
+                <View style={styles.moreOptionButton}>
+                  <View style={styles.moreOptionTextContainer}>
+                    <MaterialIcons name="chat" size={24} color="#6BB9F0" />
+                    <Text style={styles.moreOptionText}>Allow Chat</Text>
+                  </View>
+                  {settingsLoading ? (
+                    <ActivityIndicator size="small" color="#6BB9F0" />
+                  ) : (
+                    <Switch
+                      onValueChange={toggleAllowChat}
+                      value={allowChat}
+                      trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                      thumbColor={allowChat ? "#fff" : "#f4f3f4"}
+                    />
+                  )}
+                </View>
 
-            <View style={styles.moreOptionButton}>
-              <View style={styles.moreOptionTextContainer}>
-                <MaterialIcons name="post-add" size={24} color="#6BB9F0" />
-                <Text style={styles.moreOptionText}>Allow Posts</Text>
-              </View>
-              {settingsLoading ? (
-                <ActivityIndicator size="small" color="#6BB9F0" />
-              ) : (
-                <Switch
-                  onValueChange={toggleAllowPosts}
-                  value={allowPosts}
-                  trackColor={{ false: "#767577", true: "#FF9AA2" }}
-                  thumbColor={allowPosts ? "#fff" : "#f4f3f4"}
-                />
-              )}
-            </View>
+                <View style={styles.moreOptionButton}>
+                  <View style={styles.moreOptionTextContainer}>
+                    <MaterialIcons name="post-add" size={24} color="#6BB9F0" />
+                    <Text style={styles.moreOptionText}>Allow Posts</Text>
+                  </View>
+                  {settingsLoading ? (
+                    <ActivityIndicator size="small" color="#6BB9F0" />
+                  ) : (
+                    <Switch
+                      onValueChange={toggleAllowPosts}
+                      value={allowPosts}
+                      trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                      thumbColor={allowPosts ? "#fff" : "#f4f3f4"}
+                    />
+                  )}
+                </View>
+              </>
+            )}
 
             <TouchableOpacity
               style={styles.moreOptionButton}
@@ -949,14 +968,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  gridContainer: { // Jey: New grid container style
+  gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginTop: 15,
     marginBottom: 15,
   },
-  gridButton: { // Jey: New grid button style
+  gridButton: {
     width: '48%',
     borderRadius: 10,
     paddingVertical: 20,
@@ -969,7 +988,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  gridButtonText: { // Jey: New grid button text style
+  gridButtonText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,

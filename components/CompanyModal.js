@@ -11,7 +11,9 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { doc, setDoc, collection, updateDoc } from 'firebase/firestore';
 
@@ -29,57 +31,83 @@ const generateId = () => {
 const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [stationLocation, setStationLocation] = useState(''); // Jey: ✨ New state for station/location
+  const [stationLocation, setStationLocation] = useState('');
+  const [logoUri, setLogoUri] = useState(null); // Jey: State to hold the logo URI for preview
   const [loading, setLoading] = useState(false);
 
-  // Jey: Populate form with data if in "edit" mode
   useEffect(() => {
     if (companyToEdit) {
       setName(companyToEdit.name || '');
       setEmail(companyToEdit.email || '');
-      setStationLocation(companyToEdit.stationLocation || ''); // Jey: ✨ Set station/location on edit
+      setStationLocation(companyToEdit.stationLocation || '');
+      setLogoUri(companyToEdit.logoUrl || null); // Jey: Set logo URL on edit
     } else {
       setName('');
       setEmail('');
-      setStationLocation(''); // Jey: ✨ Clear station/location on add
+      setStationLocation('');
+      setLogoUri(null); // Jey: Clear logo on add
     }
   }, [companyToEdit]);
 
+  // Jey: Handles the camera selection
+  const handleCameraSelection = () => {
+    Alert.alert("Camera Selected", "This would open your device's camera. For now, a placeholder logo will be used.");
+    const dummyImage = 'https://placehold.co/100x100/A2D2FF/000000?text=Camera';
+    setLogoUri(dummyImage);
+  };
+
+  // Jey: Handles the gallery selection
+  const handleGallerySelection = () => {
+    Alert.alert("Gallery Selected", "This would open your device's photo gallery. For now, a placeholder logo will be used.");
+    const dummyImage = 'https://placehold.co/100x100/A2D2FF/000000?text=Gallery';
+    setLogoUri(dummyImage);
+  };
+
+  // Jey: Presents the user with options to pick an image source
+  const handleImagePicker = () => {
+    Alert.alert(
+      "Select Logo Source",
+      "Choose a method to upload your company logo.",
+      [
+        { text: "Camera", onPress: handleCameraSelection },
+        { text: "Gallery", onPress: handleGallerySelection },
+        { text: "Cancel", style: "cancel" },
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleSave = async () => {
-    // Jey: Validate all required fields, including the new one
     if (!name || !email || !stationLocation) {
       Alert.alert("Missing Information", "Please enter a company name, contact email, and station/location.");
       return;
     }
-
+    
     setLoading(true);
     try {
       if (companyToEdit) {
-        // Jey: Update existing company document with the new field
         await updateDoc(doc(db, 'companies', companyToEdit.id), {
           name,
           email,
-          stationLocation, // Jey: ✨ Include new field
+          stationLocation,
+          logoUrl: logoUri,
         });
         Alert.alert("Success", `Company '${name}' updated successfully!`);
       } else {
-        // Jey: Generate a custom 16-character ID
         const newCompanyId = generateId();
-
-        // Jey: Use setDoc to create the new company document with the custom ID
         await setDoc(doc(db, 'companies', newCompanyId), {
           name,
           email,
-          stationLocation, // Jey: ✨ Include new field
+          stationLocation,
+          logoUrl: logoUri,
           createdAt: new Date(),
           DspId: newCompanyId,
         });
-
-        // Jey: Use the same custom ID to create the corresponding user document
+        
         await setDoc(doc(db, 'users', newCompanyId), {
           name,
           email,
-          stationLocation, // Jey: ✨ Include new field
+          stationLocation,
           role: 'company',
           isDsp: false,
           activated: true,
@@ -88,7 +116,7 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
         
         Alert.alert("Success", `New company '${name}' added successfully!`);
       }
-      onCompanySaved(); // Refresh the list in AdminScreen
+      onCompanySaved();
     } catch (error) {
       console.error("Jey: Error saving company:", error);
       Alert.alert("Error", `Failed to save company. ${error.message}`);
@@ -114,6 +142,17 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
             {companyToEdit ? 'Edit Company' : 'Add New Company'}
           </Text>
 
+          <TouchableOpacity style={styles.logoContainer} onPress={handleImagePicker}>
+            {logoUri ? (
+              <Image source={{ uri: logoUri }} style={styles.logoImage} />
+            ) : (
+              <View style={styles.logoPlaceholder}>
+                <MaterialIcons name="camera-alt" size={40} color="#6BB9F0" />
+                <Text style={styles.logoText}>Add Logo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          
           <TextInput
             style={styles.input}
             placeholder="Company Name"
@@ -129,7 +168,6 @@ const CompanyModal = ({ visible, onClose, companyToEdit, onCompanySaved }) => {
             onChangeText={setEmail}
             keyboardType="email-address"
           />
-          {/* Jey: ✨ New input for Station/Location */}
           <TextInput
             style={styles.input}
             placeholder="Station / Location"
@@ -187,6 +225,32 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     color: '#6BB9F0',
     textAlign: 'center',
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#6BB9F0',
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    borderColor: '#6BB9F0',
+  },
+  logoText: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 5,
   },
   input: {
     height: 50,

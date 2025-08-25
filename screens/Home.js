@@ -743,8 +743,10 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-      //////// TIME OUT ///////////////////////////////////////////////////////////////////////////////
-          }, 100000);
+
+
+      //////// TIME OUT /////////////////////////////////////////////////////////////////////////
+          }, 600000);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);

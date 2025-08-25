@@ -1,3 +1,6 @@
+// Add this import at the very top
+import 'react-native-get-random-values';
+
 import React, { useState, useEffect } from 'react';
 import {
   Modal,
@@ -21,6 +24,13 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { Ionicons } from '@expo/vector-icons';
+// Jey: Import encryption library
+import CryptoJS from 'crypto-js';
+
+// Jey: IMPORTANT: For this in-code encryption, the key is here. In a production
+// environment, this key should be obfuscated or fetched from a secure source.
+// Ensure this key is exactly 32 bytes long for AES-256 encryption.
+const ENCRYPTION_KEY = "Jertopak-98-61-80"; // Jey: Use a 32-byte key
 
 const AddGateCodeModal = ({
   visible,
@@ -103,55 +113,70 @@ const AddGateCodeModal = ({
   const uploadImage = async (uri) => {
     if (!uri) return null;
 
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+    const response = await fetch(uri);
+    const blob = await response.blob();
 
-      const filename = `gate_photos/${uuidv4()}.jpg`;
-      const imageRef = ref(storage, filename);
-      await uploadBytes(imageRef, blob);
-      const downloadURL = await getDownloadURL(imageRef);
-      return downloadURL;
-    } catch (error) {
-      console.error("Jey: Error uploading image: ", error);
-      Alert.alert("Upload Error", "Failed to upload image. Please try again.");
-      return null;
-    }
+    const filename = `gate_photos/${uuidv4()}.jpg`;
+    const imageRef = ref(storage, filename);
+    await uploadBytes(imageRef, blob);
+    const downloadURL = await getDownloadURL(imageRef);
+    return downloadURL;
   };
 
   const handleSave = async () => {
+    setLoading(true);
+
     const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
     const dspToSaveId = isAdmin ? selectedDspId : userDspId;
 
+    // Jey: Step 1: Input Validation
     if (!location || !code) {
       Alert.alert('Missing Information', 'Please enter both Location/Complex Name and Gate Code.');
-      return;
-    }
-
-    if (isAdmin && !selectedDspId) {
-      Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
+      setLoading(false);
       return;
     }
     
-    // Jey: A single, final check for a valid DSP before proceeding.
+    if (isAdmin && !selectedDspId) {
+      Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
+      setLoading(false);
+      return;
+    }
+    
     if (!dspToSaveId || !dspToSaveName) {
-      console.error("Jey: Final validation failed. dspToSaveId:", dspToSaveId, "dspToSaveName:", dspToSaveName);
       Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
     let imageUrl = null;
-
+    // Jey: Step 2: Handle Image Upload Safely
     if (imageUri) {
-      imageUrl = await uploadImage(imageUri);
+      try {
+        imageUrl = await uploadImage(imageUri);
+      } catch (e) {
+        console.error("Jey: Image upload failed:", e);
+        Alert.alert("Upload Error", "Failed to upload image. Please check your network and try again.");
+        setLoading(false);
+        return; // Stop the function on upload failure
+      }
     }
 
+    let encryptedCode = null;
+    // Jey: Step 3: Handle Code Encryption Safely
     try {
-      // Jey: The 'addedBy' field has been removed here.
+      encryptedCode = CryptoJS.AES.encrypt(code, ENCRYPTION_KEY).toString();
+    } catch (e) {
+      console.error("Jey: Encryption failed:", e);
+      Alert.alert("Encryption Error", "Failed to encrypt gate code. Please ensure the key is correct and the `react-native-get-random-values` library is installed.");
+      setLoading(false);
+      return; // Stop the function on encryption failure
+    }
+
+    // Jey: Step 4: Save to Firestore Safely
+    try {
       await addDoc(collection(db, 'gateCodes'), {
         location: location,
-        code: code,
+        encryptedCode: encryptedCode,
         notes: notes,
         imageUrl: imageUrl,
         createdAt: serverTimestamp(),
@@ -162,8 +187,8 @@ const AddGateCodeModal = ({
       Alert.alert('Success', 'Gate code added successfully!');
       onSave();
     } catch (e) {
-      console.error("Jey: Error adding document: ", e);
-      Alert.alert('Error', 'Failed to add gate code. Please try again.');
+      console.error("Jey: Firestore save failed:", e);
+      Alert.alert('Error', 'Failed to add gate code. Please check your Firebase permissions and network connection.');
     } finally {
       setLoading(false);
     }

@@ -37,6 +37,11 @@ import Team from './screens/Team';
 import TeamChat from './screens/TeamChat';
 import FeedBack from './screens/FeedBack';
 import ManagePosts from './screens/ManagePosts';
+import DriverDetailScreen from './screens/DriverDetail';
+import CompanyDetailScreen from './screens/CompanyDetail';
+import GateCodeDetail from './screens/GateCodes/GateCodeDetail';
+import UpgradeModal from './components/UpgradeModal';
+import RescueModal from './components/RescueModal';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -177,11 +182,30 @@ export default function App() {
               component={LoadingScreen}
               options={{ headerShown: false }}
             />
+            {/* Admin */}
             <Stack.Screen
               name="AdminScreen"
               component={AdminScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="DriverDetail"
+              component={DriverDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CompanyDetail"
+              component={CompanyDetailScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="UpgradeModal"
+              component={UpgradeModal}
+              options={{ headerShown: false }}
+            />
+
+
+          {/* Auth */}
             <Stack.Screen
               name="Login"
               component={Login}
@@ -215,6 +239,11 @@ export default function App() {
             <Stack.Screen
               name="CompanyScreen"
               component={CompanyScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="RescueModal"
+              component={RescueModal}
               options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -259,6 +288,11 @@ export default function App() {
             <Stack.Screen
               name="Main"
               component={MainTabs}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="GateCodeDetail"
+              component={GateCodeDetail}
               options={{ headerShown: false }}
             />
             <Stack.Screen

@@ -8,6 +8,7 @@ import { db } from '../firebase';
 import { collection, query, getDocs, where, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import CompanyModal from '../components/CompanyModal';
 import AssignDSPModal from '../components/AssignDSPModal';
+import TransferDSPModal from '../components/TransferDSPModal';
 
 const AdminScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('companies');
@@ -25,14 +26,9 @@ const AdminScreen = ({ navigation }) => {
   const [isAssignDSPModalVisible, setIsAssignDSPModal] = useState(false);
   const [selectedCompanyForDSP, setSelectedCompanyForDSP] = useState(null);
   
-  // Jey: State for the logged-in user
   const [loggedInUser, setLoggedInUser] = useState(null);
 
-  // Jey: Placeholder function to get the current user ID
-  // **IMPORTANT:** Replace this with your actual logic to get the current user's ID
   const getUserId = () => {
-    // For example: `return auth.currentUser.uid;`
-    // Jey: Using the ID from your screenshot for testing
     return 'nGpRSSIgZZeZExkZWDxRS80z8A3';
   };
 
@@ -40,7 +36,6 @@ const AdminScreen = ({ navigation }) => {
     setLoading(true);
     setRefreshing(true);
     try {
-      // Jey: Fetch all data concurrently and efficiently
       const [
         usersSnapshot,
         companiesSnapshot,
@@ -59,7 +54,6 @@ const AdminScreen = ({ navigation }) => {
       setCompanies(companiesData);
       setDrivers(driversData);
 
-      // Jey: Find the logged-in user's data from the fetched list
       const currentUserId = getUserId();
       const currentUserData = allUsersData.find(user => user.id === currentUserId);
       setLoggedInUser(currentUserData || { name: 'Admin User', photoURL: null });
@@ -67,12 +61,12 @@ const AdminScreen = ({ navigation }) => {
     } catch (error) {
       console.error("Jey: Error fetching admin data:", error);
       Alert.alert("Error", "Failed to load admin data. Please try again.");
-      setLoggedInUser({ name: 'Admin User', photoURL: null }); // Jey: Set placeholder on error
+      setLoggedInUser({ name: 'Admin User', photoURL: null });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []); // Jey: Empty dependency array means this function is created once
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -208,14 +202,19 @@ const AdminScreen = ({ navigation }) => {
     );
   };
 
+  const navigateToCompanyDetail = (companyId) => {
+    navigation.navigate('CompanyDetail', { companyId });
+  };
+
   const renderCompanyItem = ({ item }) => {
-    const dspDrivers = drivers.filter(d => d.dspName === item.name);
-    const activeDriverCount = dspDrivers.filter(d => d.activated).length;
+    // Jey: FIX - Filter out the DSP admin from the driver count.
+    const companyDrivers = allUsers.filter(user => user.dspName === item.name && user.role === 'driver');
+    const activeDriverCount = companyDrivers.filter(d => d.activated).length;
     const isDSPAssigned = !!item.dspUserId;
     const assignedDSP = isDSPAssigned ? allUsers.find(user => user.id === item.dspUserId) : null;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity onPress={() => navigateToCompanyDetail(item.id)} style={styles.card}>
         <View style={styles.cardHeader}>
           <MaterialIcons name="business" size={24} color="#6BB9F0" />
           <Text style={styles.cardTitle}>{item.name || 'No Name'}</Text>
@@ -228,51 +227,18 @@ const AdminScreen = ({ navigation }) => {
         </View>
         <View style={styles.cardRow}>
           <Text style={styles.cardLabel}>Total Drivers:</Text>
-          <Text style={styles.cardValue}>{dspDrivers.length}</Text>
+          <Text style={styles.cardValue}>{companyDrivers.length}</Text>
         </View>
         <View style={styles.cardRow}>
           <Text style={styles.cardLabel}>Active:</Text>
           <Text style={[styles.cardValue, { color: 'green', fontWeight: 'bold' }]}>{activeDriverCount}</Text>
         </View>
-        <View style={styles.cardActions}>
-          {isDSPAssigned ? (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.unassignButton]}
-              onPress={() => handleUnassignDSP(item)}
-            >
-              <MaterialIcons name="remove-circle" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Unassign</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.assignButton]}
-              onPress={() => handleOpenAssignDSPModal(item)}
-            >
-              <MaterialIcons name="person-add" size={20} color="#fff" />
-              <Text style={styles.actionButtonText}>Assign</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => handleOpenCompanyModal(item)}
-          >
-            <MaterialIcons name="edit" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Edit</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteCompany(item.id, item.name)}
-          >
-            <MaterialIcons name="delete" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      </TouchableOpacity>
     );
   };
-
+  
   const renderDriverItem = ({ item }) => (
-    <View style={styles.listItem}>
+    <TouchableOpacity onPress={() => navigation.navigate('DriverDetail', { driverId: item.id })} style={styles.listItem}>
       <View style={styles.driverInfo}>
         <MaterialIcons name="person" size={24} color="#6BB9F0" />
         <View style={styles.driverTextContainer}>
@@ -293,7 +259,7 @@ const AdminScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderMoreTab = () => (
@@ -413,7 +379,7 @@ const AdminScreen = ({ navigation }) => {
           )}
           <View>
             <Text style={styles.headerTitle}>Admin Dashboard</Text>
-            <Text style={styles.userName}>{loggedInUser?.name || 'Admin User'}</Text>
+            <Text style={styles.userNameText}>{loggedInUser?.name || 'Admin User'}</Text>
           </View>
         </View>
         <TouchableOpacity onPress={handleRefresh} style={styles.refreshIconContainer}>

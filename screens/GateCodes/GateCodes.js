@@ -18,9 +18,11 @@ import { db } from '../../firebase';
 import { collection, query, onSnapshot, orderBy, deleteDoc, doc, where, getDocs } from 'firebase/firestore';
 import AddGateCodeModal from '../../components/AddGateCodeModal';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const GateCodes = () => {
   const { userData, user } = useAuth();
+  const navigation = useNavigation();
   const [gateCodes, setGateCodes] = useState([]);
   const [filteredGateCodes, setFilteredGateCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,11 +36,8 @@ const GateCodes = () => {
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
 
-  // Jey: This useEffect is for non-admin users to find their DSP's company ID
-  // and for admins to get the list of all DSPs.
   useEffect(() => {
     const fetchDspData = async () => {
-      // Jey: Handle the case where userData is not yet available
       if (!userData?.dspName) {
         setIsDSPsLoading(false);
         return;
@@ -49,17 +48,14 @@ const GateCodes = () => {
       const dspsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDsps(dspsList);
       
-      // Jey: Logic to find the company ID for the currently logged-in user
       if (userData.role !== 'admin') {
         const foundDsp = dspsList.find(dsp => dsp.name === userData.dspName);
         if (foundDsp) {
           setCurrentDspId(foundDsp.id);
-          console.log("Jey: Found DSP ID for non-admin user:", foundDsp.id);
         } else {
           console.error("Jey: Could not find company document for dspName:", userData.dspName);
         }
       } else {
-        // Jey: Admins don't need a specific DSP ID pre-selected, but they need the list
         console.log("Jey: Logged in as an admin. DSP list is ready.");
       }
 
@@ -69,7 +65,6 @@ const GateCodes = () => {
     fetchDspData();
   }, [userData?.role, userData?.dspName]);
 
-  // Jey: Updated query to filter by the current user's DSP name or show all for admin
   useEffect(() => {
     if (!userData?.dspName && userData?.role !== 'admin') {
       setLoading(false);
@@ -108,8 +103,6 @@ const GateCodes = () => {
   }, [userData?.dspName, userData?.role]);
 
   useEffect(() => {
-    // Jey: isDataReady is now true when loading is false for non-admins,
-    // or when both lists are loaded for admins.
     const isUserNonAdmin = userData?.role !== 'admin';
     const isNonAdminDataReady = isUserNonAdmin && !loading && !isDSPsLoading && currentDspId;
     const isAdminDataReady = userData?.role === 'admin' && !loading && !isDSPsLoading;
@@ -175,7 +168,6 @@ const GateCodes = () => {
           onPress: async () => {
             try {
               await deleteDoc(doc(db, 'gateCodes', codeId));
-              console.log("Jey: Gate code deleted successfully:", codeId);
             } catch (error) {
               console.error("Jey: Error deleting gate code:", error);
               Alert.alert("Error", "Failed to delete gate code. Please try again.");
@@ -188,6 +180,10 @@ const GateCodes = () => {
     );
   };
 
+  const handleViewDetails = (gateCodeId) => {
+    navigation.navigate('GateCodeDetail', { gateCodeId });
+  };
+  
   if (loading || isDSPsLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -223,21 +219,25 @@ const GateCodes = () => {
             data={filteredGateCodes}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <View style={styles.codeCard}>
-                <TouchableOpacity
-                  onPress={() => handleImageClick(item.imageUrl || require('../../assets/gate.png'))}
-                  style={styles.cardImageContainer}
-                >
+              <TouchableOpacity
+                style={styles.codeCard}
+                onPress={() => handleViewDetails(item.id)}
+              >
+                <View style={styles.cardImageContainer}>
                   <Image
                     source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/gate.png')}
                     style={styles.cardImage}
                   />
-                </TouchableOpacity>
+                </View>
                 <View style={styles.cardContent}>
                   <Text style={styles.location}>{item.location}</Text>
-                  <Text style={styles.code}>Code: {item.code}</Text>
+                  {/* Jey: The list shows status, not the actual code */}
+                  <Text style={styles.code}>Status: Encrypted</Text> 
                   {item.notes && <Text style={styles.notes}>Notes: {item.notes}</Text>}
                   {item.dspName && <Text style={styles.dspName}>Added by: {item.dspName}</Text>}
+                </View>
+                <View style={styles.cardActions}>
+                  <Ionicons name="chevron-forward" size={24} color="#666" />
                 </View>
                 {(user?.uid === item.addedBy || userData?.role === 'admin' || userData?.role === 'company') && (
                   <TouchableOpacity
@@ -247,7 +247,7 @@ const GateCodes = () => {
                     <Ionicons name="trash-outline" size={24} color="#DC3545" />
                   </TouchableOpacity>
                 )}
-              </View>
+              </TouchableOpacity>
             )}
             contentContainerStyle={styles.listContent}
           />
@@ -367,6 +367,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     marginBottom: 5,
+    fontStyle: 'italic',
   },
   notes: {
     fontSize: 12,
@@ -441,8 +442,15 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   deleteIconContainer: {
-    marginLeft: 15,
+    position: 'absolute',
+    right: 5,
+    top: 5,
     padding: 5,
+  },
+  cardActions: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 
