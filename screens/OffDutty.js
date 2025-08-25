@@ -241,25 +241,25 @@ const styles = StyleSheet.create({
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FF5733', // A distinct color for logout, e.g., redAccent
+       //backgroundColor: '#FF5733', // A distinct color for logout, e.g., redAccent
         paddingVertical: 12,
         paddingHorizontal: 25,
         borderRadius: 10,
         marginTop: 100, // A bit of space from the refresh button
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 3,
+        //shadowColor: '#000',
+        //shadowOffset: { width: 0, height: 2 },
+        //shadowOpacity: 0.2,
+        //shadowRadius: 4,
+        //elevation: 3,
     },
     logoutIcon: {
         width: 20, // Match refresh icon size
         height: 20, // Match refresh icon size
-        tintColor: '#FFFFFF',
+        tintColor: '#FF5733',
     },
     logoutButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
+        color: '#FF5733',
+        fontSize: 18,
         fontWeight: '600',
         marginLeft: 8,
     },
