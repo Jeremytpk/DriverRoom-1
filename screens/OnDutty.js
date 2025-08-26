@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from 'firebase/firestore';
@@ -411,12 +411,12 @@ const OnDutty = ({ navigation }) => {
                 contentContainerStyle={styles.listContent}
             />
             <RescueModal
-                visible={isRescueModalVisible}
-                onClose={() => setIsRescueModalVisible(false)}
-                onDispatch={handleDispatchRescue}
-                allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
-                rescueInitiator={selectedUserForRescue}
-            />
+    visible={isRescueModalVisible}
+    onClose={() => setIsRescueModalVisible(false)}
+    onDispatch={handleDispatchRescue}
+    allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
+    rescuer={selectedUserForRescue}
+/>
         </View>
     );
 };

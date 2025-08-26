@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
-  ScrollView, Dimensions, Modal, Platform, RefreshControl, Alert
+  ScrollView, Dimensions, Modal, Platform, RefreshControl, Alert, Linking
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -85,6 +85,7 @@ const HomeScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('HomeTab');
   const [isReturnsModalVisible, setIsReturnsModalVisible] = useState(false);
   const [isRTSConfirmed, setIsRTSConfirmed] = useState(userData?.isRTSConfirmed || false);
+  const [rescueRequest, setRescueRequest] = useState(null);
 
   useEffect(() => {
     const currentRouteName = route.name;
@@ -127,6 +128,25 @@ const HomeScreen = ({ navigation }) => {
 
     return () => unsubscribe();
   }, [userData?.uid, setUserData]);
+
+  useEffect(() => {
+    if (!userData?.uid) return;
+
+    const db = getFirestore();
+    const rescuesRef = collection(db, 'rescues');
+    const q = query(rescuesRef, where('rescuerId', '==', userData.uid), where('status', '==', 'dispatched'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const rescueData = snapshot.docs[0].data();
+        setRescueRequest({ id: snapshot.docs[0].id, ...rescueData });
+      } else {
+        setRescueRequest(null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [userData?.uid]);
 
   const startAutoScroll = () => {
     clearInterval(autoScrollIntervalRef.current);
@@ -355,6 +375,30 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const handleAcknowledgeRescue = async () => {
+    if (!rescueRequest) return;
+    try {
+      const db = getFirestore();
+      const rescueRef = doc(db, 'rescues', rescueRequest.id);
+      await updateDoc(rescueRef, { status: 'acknowledged' });
+      setRescueRequest(null);
+      Alert.alert("Rescue Acknowledged", "You have acknowledged the rescue request. Stay safe!");
+    } catch (error) {
+      console.error("Jey: Error acknowledging rescue:", error);
+      Alert.alert("Error", "Failed to acknowledge rescue request. Please try again.");
+    }
+  };
+  
+  const handleOpenMaps = (address) => {
+    const platformAddress = Platform.select({
+      ios: `maps:0,0?q=${address}`,
+      android: `geo:0,0?q=${address}`,
+    });
+
+    Linking.openURL(platformAddress).catch(err => console.error('Jey: Failed to open maps:', err));
+  };
+
+
   if (isRTSConfirmed) {
     return (
       <View style={styles.rtsConfirmedContainer}>
@@ -382,6 +426,24 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
+        {/* Jey: Rescue Request Card */}
+        {rescueRequest && (
+          <View style={styles.rescueCard}>
+            <View style={styles.rescueCardHeader}>
+              <MaterialIcons name="local-hospital" size={24} color={Colors.white} />
+              <Text style={styles.rescueCardTitle}>Rescue Dispatched!</Text>
+            </View>
+            <Text style={styles.rescueMessage}>You have been assigned to rescue {rescueRequest.rescueeName}.</Text>
+            <TouchableOpacity style={styles.addressButton} onPress={() => handleOpenMaps(rescueRequest.rescueAddress)}>
+                <MaterialIcons name="location-on" size={20} color={Colors.darkText} />
+                <Text style={styles.addressText}>{rescueRequest.rescueAddress}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.rescueAcknowledgeButton} onPress={handleAcknowledgeRescue}>
+                <Text style={styles.rescueAcknowledgeButtonText}>Acknowledge & Start</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {loadingTips ? (
           <View style={styles.centralCardLoading}>
             <ActivityIndicator size="large" color={Colors.primaryTeal} />
@@ -741,9 +803,11 @@ const PendingApprovalScreen = ({ navigation }) => {
   );
 };
 
+// Jey: --- THIS IS THE UPDATED COMPONENT ---
 const HomeWrapper = () => {
   const { userData, loading, setUserData } = useAuth();
   const navigation = useNavigation();
+  // Corrected the typo in the state setter from 'setLocalIsOnDutty...'
   const [localIsOnDutyOrTrainerStatus, setLocalIsOnDutyOrTrainerStatus] = useState(false);
   const [showFloatingButton, setShowFloatingButton] = useState(false);
   const fixedTimerRef = useRef(null);
@@ -753,6 +817,7 @@ const HomeWrapper = () => {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       try {
+        // Note: The database field is still 'isOnDutty'. This change only affects the client-side code.
         await updateDoc(userRef, { isOnDutty: status });
         console.log(`Jey: User status updated to ${status}.`);
       } catch (error) {
@@ -800,6 +865,7 @@ const HomeWrapper = () => {
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        // Using the corrected function name here.
         setLocalIsOnDutyOrTrainerStatus(data.isOnDutty || false);
 
         if (data.isOnDutty) {
@@ -819,11 +885,13 @@ const HomeWrapper = () => {
         }
       } else {
         console.warn("Jey: User document not found during isOnDutty listener for UID:", userData.uid);
+        // Using the corrected function name here.
         setLocalIsOnDutyOrTrainerStatus(false);
       }
     }, (error) => {
       console.error("Jey: Error listening to user's isOnDutty status:", error);
-      setLocalIsOnDuttyOrTrainerStatus(false);
+      // Using the corrected function name here.
+      setLocalIsOnDutyOrTrainerStatus(false);
     });
 
     return () => {
@@ -1437,6 +1505,72 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  // Jey: Styles for the new rescue card
+  rescueCard: {
+    width: screenWidth - 40,
+    backgroundColor: Colors.accentSalmon,
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  rescueCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  rescueCardTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: Colors.white,
+    marginLeft: 10,
+  },
+  rescueMessage: {
+    fontSize: 16,
+    color: Colors.white,
+    lineHeight: 24,
+    marginBottom: 15,
+  },
+  addressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  addressText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: Colors.darkText,
+    textDecorationLine: 'underline',
+  },
+  rescueAcknowledgeButton: {
+    backgroundColor: Colors.checkInGreen,
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  rescueAcknowledgeButtonText: {
+    color: Colors.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  dot: {
+    height: 8,
+    width: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 3,
+  },
+  activeDot: {
+    width: 20,
+    backgroundColor: Colors.white,
   },
 });
 
