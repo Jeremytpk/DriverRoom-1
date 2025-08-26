@@ -20,6 +20,7 @@ import OffDutty from '../screens/OffDutty';
 import Team from '../screens/Team';
 import TeamChat from '../screens/TeamChat';
 import ReturnsModal from '../components/ReturnsModal';
+import ReturnsDetail from '../screens/ReturnsDetail';
 
 const Stack = createStackNavigator();
 
@@ -39,6 +40,7 @@ const Colors = {
 
 const { width: screenWidth } = Dimensions.get('window');
 
+// --- Extracted DriverProfileHeader Component ---
 const DriverProfileHeader = ({ userData }) => (
   <View style={styles.driverProfileSection}>
     <View style={styles.avatarContainer}>
@@ -82,6 +84,7 @@ const HomeScreen = ({ navigation }) => {
   const route = useRoute();
   const [activeTab, setActiveTab] = useState('HomeTab');
   const [isReturnsModalVisible, setIsReturnsModalVisible] = useState(false);
+  const [isRTSConfirmed, setIsRTSConfirmed] = useState(userData?.isRTSConfirmed || false);
 
   useEffect(() => {
     const currentRouteName = route.name;
@@ -112,9 +115,11 @@ const HomeScreen = ({ navigation }) => {
           ...prevUserData,
           allowChat: updatedUserData.allowChat ?? true,
           allowPosts: updatedUserData.allowPosts ?? true,
-          isCheckedIn: updatedUserData.isCheckedIn ?? false
+          isCheckedIn: updatedUserData.isCheckedIn ?? false,
+          isRTSConfirmed: updatedUserData.isRTSConfirmed ?? false,
         }));
         setIsCheckedIn(updatedUserData.isCheckedIn ?? false);
+        setIsRTSConfirmed(updatedUserData.isRTSConfirmed ?? false);
       }
     }, (error) => {
       console.error("Jey: Error listening to user document:", error);
@@ -331,8 +336,6 @@ const HomeScreen = ({ navigation }) => {
               timestamp: serverTimestamp(),
           });
           
-          // Jey: No duty status change here
-          
           Alert.alert("Success", "Route completion and returns logged successfully!");
       } catch (error) {
           console.error("Jey: Error logging route completion:", error);
@@ -340,6 +343,32 @@ const HomeScreen = ({ navigation }) => {
           throw error;
       }
   };
+  
+  const handleAcknowledgeRTS = async () => {
+    try {
+      const db = getFirestore();
+      const userRef = doc(db, 'users', userData.uid);
+      await updateDoc(userRef, { isRTSConfirmed: false, isOnDutty: false, isCheckedIn: false }); 
+    } catch (error) {
+      console.error("Jey: Error acknowledging RTS:", error);
+      Alert.alert("Error", "Failed to acknowledge return to station. Please try again.");
+    }
+  };
+
+  if (isRTSConfirmed) {
+    return (
+      <View style={styles.rtsConfirmedContainer}>
+        <MaterialIcons name="local-shipping" size={100} color={Colors.primaryTeal} />
+        <Text style={styles.rtsConfirmedTitle}>Route Completed!</Text>
+        <Text style={styles.rtsConfirmedMessage}>
+          Your route for today has been safely completed. Your DSP has confirmed your return to the station. Thank you!
+        </Text>
+        <TouchableOpacity style={styles.rtsConfirmedButton} onPress={handleAcknowledgeRTS}>
+          <Text style={styles.rtsConfirmedButtonText}>Acknowledge</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -780,7 +809,9 @@ const HomeWrapper = () => {
           fixedTimerRef.current = setTimeout(() => {
             console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-          }, 600000);
+
+//////////////TIME OUT////////////////////////////////////////////////////////////////////////////
+          }, 100000);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
@@ -873,6 +904,13 @@ const HomeWrapper = () => {
         <Stack.Screen
           name="OneConversation"
           component={OneConversation}
+          options={{
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="ReturnsDetail"
+          component={ReturnsDetail}
           options={{
             headerShown: false,
           }}
@@ -1368,7 +1406,38 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
+  rtsConfirmedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.lightBackground,
+    padding: 20,
+  },
+  rtsConfirmedTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.darkText,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  rtsConfirmedMessage: {
+    fontSize: 16,
+    color: Colors.mediumText,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 30,
+  },
+  rtsConfirmedButton: {
+    backgroundColor: Colors.primaryTeal,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+  },
+  rtsConfirmedButtonText: {
+    color: Colors.white,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
 });
 
 export default HomeWrapper;
-

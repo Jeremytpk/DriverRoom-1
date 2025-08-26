@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, 
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, getDocs } from 'firebase/firestore';
 import RescueModal from '../components/RescueModal';
 
 const OnDutty = ({ navigation }) => {
@@ -21,6 +21,8 @@ const OnDutty = ({ navigation }) => {
     const [allDrivers, setAllDrivers] = useState([]);
     
     const [companyPlan, setCompanyPlan] = useState('Essentials');
+    const [multiSelectMode, setMultiSelectMode] = useState(false);
+    const [returnsCache, setReturnsCache] = useState({});
 
     const autoSwitchToOffDuty = async (userId, userName) => {
         try {
@@ -32,6 +34,25 @@ const OnDutty = ({ navigation }) => {
             Alert.alert("Error", "Failed to update user status automatically.");
         }
     };
+
+    useEffect(() => {
+      const returnsQuery = query(collection(db, 'returns'));
+      const unsubscribeReturns = onSnapshot(returnsQuery, (snapshot) => {
+        const cache = {};
+        snapshot.forEach(doc => {
+          const driverId = doc.data().driverId;
+          if (cache[driverId]) {
+            cache[driverId].push(doc.id);
+          } else {
+            cache[driverId] = [doc.id];
+          }
+        });
+        setReturnsCache(cache);
+      }, (error) => {
+        console.error("Jey: Error fetching returns in real-time:", error);
+      });
+      return () => unsubscribeReturns();
+    }, []);
 
     useEffect(() => {
         if (!userData?.dspName) {
@@ -53,9 +74,9 @@ const OnDutty = ({ navigation }) => {
         );
         
         const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
-            const usersList = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
+            const usersList = snapshot.docs.map(userDoc => ({
+                id: userDoc.id,
+                ...userDoc.data()
             }));
             
             const count = usersList.filter(user => user.isCheckedIn).length;
@@ -107,7 +128,6 @@ const OnDutty = ({ navigation }) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setCompanyPlan(data.plan || 'Essentials');
-                console.log("Jey: Real-time plan update received:", data.plan);
             }
         });
 
@@ -157,6 +177,7 @@ const OnDutty = ({ navigation }) => {
     };
 
     const handleSelectAll = () => {
+        setMultiSelectMode(true);
         if (selectedUsers.size === onDutyUsers.length) {
             setSelectedUsers(new Set());
         } else {
@@ -164,8 +185,13 @@ const OnDutty = ({ navigation }) => {
             setSelectedUsers(new Set(allUserIds));
         }
     };
-
+    
     const handleMassOffDuty = () => {
+        if (selectedUsers.size === 0) {
+            Alert.alert("No Users Selected", "Please select at least one user to move off-duty.");
+            return;
+        }
+
         Alert.alert(
             "Move Users Off-Duty",
             `Are you sure you want to move ${selectedUsers.size} user(s) to off-duty?`,
@@ -181,6 +207,7 @@ const OnDutty = ({ navigation }) => {
                             });
                             await Promise.all(updates);
                             setSelectedUsers(new Set());
+                            setMultiSelectMode(false);
                             Alert.alert("Success", `${selectedUsers.size} users have been moved to Off-Duty.`);
                         } catch (error) {
                             console.error("Jey: Error mass updating user status:", error);
@@ -202,7 +229,6 @@ const OnDutty = ({ navigation }) => {
       );
     };
     
-    // Jey: New function to handle the RTS action
     const handleRTS = (driver) => {
         Alert.alert(
             "Confirm Return to Station",
@@ -214,10 +240,10 @@ const OnDutty = ({ navigation }) => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', driver.id);
-                            // Jey: Mark the driver's status as RTS confirmed
-                            await updateDoc(userRef, { isRTSConfirmed: true, isOnDutty: false, isCheckedIn: false });
-                            Alert.alert("Success", `${driver.name} has been marked as returned to station.`);
-                            setSelectedUserForRescue(null); // Deselect the driver
+                            // Jey: Set isRTSConfirmed to true
+                            await updateDoc(userRef, { isRTSConfirmed: true });
+                            Alert.alert("Success", `Confirmation sent to ${driver.name}.`);
+                            setSelectedUserForRescue(null);
                         } catch (error) {
                             console.error("Jey: Error updating RTS status:", error);
                             Alert.alert("Error", "Failed to confirm return to station. Please try again.");
@@ -231,20 +257,21 @@ const OnDutty = ({ navigation }) => {
     const filteredUsers = onDutyUsers.filter(user =>
         user.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-    
+
     const renderUserItem = ({ item }) => {
         const isSelected = selectedUsers.has(item.id);
         const isTrainer = item.role === 'trainer';
-        
         const isSelectedForRescue = selectedUserForRescue && selectedUserForRescue.id === item.id;
         
         const handleCardPress = () => {
             if (companyPlan === 'Executive') {
                 setSelectedUserForRescue(isSelectedForRescue ? null : item);
-            } else {
-                handleToggleSelect(item.id);
             }
         };
+        
+        const hasReturns = returnsCache[item.id] && returnsCache[item.id].length > 0;
+        // Jey: New conditional check for the eye icon
+        const showEyeIcon = hasReturns && !item.isRTSConfirmed;
 
         return (
             <View>
@@ -256,14 +283,15 @@ const OnDutty = ({ navigation }) => {
                     ]}
                 >
                     <View style={styles.userInfo}>
-                        {companyPlan === 'Essentials' || companyPlan === 'Professional' ? (
-                            <Ionicons
-                                name={isSelected ? "checkbox-outline" : "square-outline"}
-                                size={24}
-                                color={isSelected ? "#6BB9F0" : "#999"}
-                                style={{ marginRight: 10 }}
-                            />
-                        ) : null}
+                        {multiSelectMode && (
+                            <TouchableOpacity onPress={() => handleToggleSelect(item.id)} style={styles.checkboxContainer}>
+                                <Ionicons
+                                    name={isSelected ? "checkbox-outline" : "square-outline"}
+                                    size={24}
+                                    color={isSelected ? "#6BB9F0" : "#999"}
+                                />
+                            </TouchableOpacity>
+                        )}
                         <Ionicons name="person-circle-outline" size={40} color={isTrainer ? "#FFC107" : "#6BB9F0"} />
                         <View style={styles.userNameContainer}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -283,13 +311,14 @@ const OnDutty = ({ navigation }) => {
                         </View>
                     </View>
                     <View style={styles.actionButtons}>
-                        {/* Jey: Add the Eye icon here */}
-                        <TouchableOpacity
-                            style={[styles.actionBtn, styles.viewReturnsButton]}
-                            onPress={() => navigation.navigate('ReturnsDetail', { driverId: item.id })}
-                        >
-                            <Ionicons name="eye-outline" size={20} color="#fff" />
-                        </TouchableOpacity>
+                        {showEyeIcon && (
+                            <TouchableOpacity
+                                style={[styles.actionBtn, styles.viewReturnsButton]}
+                                onPress={() => navigation.navigate('ReturnsDetail', { driverId: item.id })}
+                            >
+                                <Ionicons name="eye-outline" size={20} color="#fff" />
+                            </TouchableOpacity>
+                        )}
                         
                         {item.isCheckedIn && (
                             <View style={styles.checkedInIcon}>
@@ -313,7 +342,6 @@ const OnDutty = ({ navigation }) => {
                             <Ionicons name="help-circle-outline" size={20} color="#fff" />
                             <Text style={styles.rescueButtonText}>Dispatch Rescue</Text>
                         </TouchableOpacity>
-                        {/* Jey: Add the new RTS button here */}
                         <TouchableOpacity 
                             style={[styles.rescueButton, styles.rtsButton]}
                             onPress={() => handleRTS(item)}
@@ -350,18 +378,18 @@ const OnDutty = ({ navigation }) => {
 
             <View style={styles.headerControls}>
                 <View style={styles.selectAndCount}>
-                    {companyPlan === 'Essentials' || companyPlan === 'Professional' ? (
-                        <TouchableOpacity onPress={handleSelectAll}>
+                    {companyPlan !== 'Executive' && (
+                        <TouchableOpacity onPress={() => setMultiSelectMode(!multiSelectMode)}>
                             <Text style={styles.selectAllText}>
-                                {selectedUsers.size === onDutyUsers.length ? "Deselect All" : "Select All"}
+                                {multiSelectMode ? 'Cancel Selection' : 'Multi-Select'}
                             </Text>
                         </TouchableOpacity>
-                    ) : null}
+                    )}
                     <Text style={styles.countText}>
                         <Text style={{color: '#333', fontWeight: 'bold'}}>{onDutyUsers.length}</Text> on-duty | <Text style={{color: '#28a745', fontWeight: 'bold'}}>{checkedInCount}</Text> checked-in
                     </Text>
                 </View>
-                {selectedUsers.size > 0 && (
+                {(multiSelectMode && selectedUsers.size > 0) && (
                     <TouchableOpacity style={styles.offDutyAllButton} onPress={handleMassOffDuty}>
                         <Text style={styles.offDutyAllButtonText}>
                             Move {selectedUsers.size} User(s) Off-Duty
@@ -579,7 +607,13 @@ const styles = StyleSheet.create({
     },
     viewReturnsButton: {
         backgroundColor: '#6BB9F0',
+        height: 30,
+        width: 30,
+        borderRadius: 100,
+        color: '#6BB9F0',
         marginRight: 10,
+        paddingLeft: 5,
+        paddingTop: 4,
     },
 });
 

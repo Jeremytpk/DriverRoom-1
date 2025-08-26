@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
   TextInput, Switch, Alert, KeyboardAvoidingView, Platform,
@@ -6,7 +6,8 @@ import {
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { doc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, arrayUnion, addDoc, collection, getDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
   const [hasReturns, setHasReturns] = useState(false);
@@ -14,8 +15,28 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
   const [selectedReasons, setSelectedReasons] = useState(new Set());
   const [otherReason, setOtherReason] = useState('');
   const [loading, setLoading] = useState(false);
+  const [driverData, setDriverData] = useState(null);
 
   const reasons = ['Business Closed', 'Access Problem', 'Customer Unavailable', 'Other'];
+
+  useEffect(() => {
+    // Jey: Fetch the current driver's data to get the DSP ID
+    const fetchDriverData = async () => {
+        try {
+            const auth = getAuth();
+            const user = auth.currentUser;
+            if (user) {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    setDriverData(userDoc.data());
+                }
+            }
+        } catch (error) {
+            console.error("Jey: Error fetching driver data:", error);
+        }
+    };
+    fetchDriverData();
+  }, [visible]);
 
   const handleToggleReason = (reason) => {
     setSelectedReasons(prev => {
@@ -41,6 +62,13 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
       }
     }
     
+    // Jey: Check if driver data is available and has a DSP assigned
+    if (!driverData || !driverData.dspUserId) {
+      Alert.alert('Error', 'No DSP is assigned to this driver. Cannot log returns.');
+      onClose();
+      return;
+    }
+
     setLoading(true);
     let reasonsToLog = Array.from(selectedReasons);
     if (otherReason.trim() !== '') {
@@ -48,6 +76,19 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
     }
 
     try {
+        // Jey: Create a new document in the 'returns' collection to trigger a notification
+        await addDoc(collection(db, 'returns'), {
+            driverId: getAuth().currentUser.uid,
+            driverName: driverData.name,
+            dspId: driverData.dspUserId,
+            hasReturns,
+            returnCount: hasReturns ? parseInt(returnCount) : 0,
+            reasons: hasReturns ? reasonsToLog : [],
+            timestamp: serverTimestamp(),
+            notified: false, // Jey: Add a flag for the cloud function to use
+        });
+
+        // Jey: Call the parent's onLogReturns function with the updated data
         await onLogReturns({
             hasReturns,
             returnCount: hasReturns ? parseInt(returnCount) : 0,
@@ -137,7 +178,7 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
               <Text style={returnsModalStyles.buttonText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={returnsModalStyles.submitButton}
+              style={[returnsModalStyles.submitButton, { backgroundColor: hasReturns ? '#FA8072' : '#008080' }]}
               onPress={handleSubmit}
               disabled={loading}
             >

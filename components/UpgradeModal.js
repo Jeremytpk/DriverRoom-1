@@ -1,16 +1,47 @@
 // Jey: A new modal for managing company subscription plans.
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Modal, View, Text, StyleSheet, TouchableOpacity,
-  Alert
+  Alert, TextInput,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const UpgradeModal = ({ visible, onClose, onUpgrade }) => {
-  const handleUpgradeSelection = (plan) => {
-    // Jey: Call the onUpgrade function from the parent with the selected plan
-    onUpgrade(plan);
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [selectedDuration, setSelectedDuration] = useState('Trial');
+  const [customDays, setCustomDays] = useState('');
+
+  const handleUpgradePress = () => {
+    if (!selectedPlan) {
+      Alert.alert("Selection Required", "Please select a plan to upgrade.");
+      return;
+    }
+
+    let days = 0;
+    if (selectedPlan !== 'Essentials') {
+      if (selectedDuration === 'Trial') {
+        days = 15;
+      } else if (selectedDuration === 'Full') {
+        days = 30;
+      } else if (selectedDuration === 'Other') {
+        const parsedDays = parseInt(customDays, 10);
+        if (isNaN(parsedDays) || parsedDays <= 0) {
+          Alert.alert("Invalid Input", "Please enter a valid number of days.");
+          return;
+        }
+        days = parsedDays;
+      }
+    }
+
+    onUpgrade(selectedPlan, days);
     onClose();
+    resetState();
+  };
+  
+  const resetState = () => {
+    setSelectedPlan(null);
+    setSelectedDuration('Trial');
+    setCustomDays('');
   };
 
   return (
@@ -18,45 +49,122 @@ const UpgradeModal = ({ visible, onClose, onUpgrade }) => {
       animationType="slide"
       transparent={true}
       visible={visible}
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        resetState();
+        onClose();
+      }}
     >
       <View style={upgradeStyles.centeredView}>
         <View style={upgradeStyles.modalView}>
           <Text style={upgradeStyles.modalTitle}>Upgrade Company Plan</Text>
-          <Text style={upgradeStyles.modalSubtitle}>Select a new plan to upgrade or downgrade.</Text>
+          <Text style={upgradeStyles.modalSubtitle}>Select a plan and duration.</Text>
 
+          {/* Plan Selection */}
           <View style={upgradeStyles.planContainer}>
             <TouchableOpacity
-              style={[upgradeStyles.planButton, upgradeStyles.essentialsPlan]}
-              onPress={() => handleUpgradeSelection('Essentials')}
+              style={[
+                upgradeStyles.planButton,
+                upgradeStyles.essentialsPlan,
+                selectedPlan === 'Essentials' && upgradeStyles.planButtonSelected
+              ]}
+              onPress={() => {
+                setSelectedPlan('Essentials');
+                setSelectedDuration(null); // No duration for Essentials
+              }}
             >
               <MaterialIcons name="local-fire-department" size={24} color="#fff" />
               <Text style={upgradeStyles.planButtonText}>Essentials</Text>
             </TouchableOpacity>
-            
             <TouchableOpacity
-              style={[upgradeStyles.planButton, upgradeStyles.professionalPlan]}
-              onPress={() => handleUpgradeSelection('Professional')}
+              style={[
+                upgradeStyles.planButton,
+                upgradeStyles.professionalPlan,
+                selectedPlan === 'Professional' && upgradeStyles.planButtonSelected
+              ]}
+              onPress={() => setSelectedPlan('Professional')}
             >
               <MaterialIcons name="person-pin" size={24} color="#fff" />
               <Text style={upgradeStyles.planButtonText}>Professional</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[upgradeStyles.planButton, upgradeStyles.executivePlan]}
-              onPress={() => handleUpgradeSelection('Executive')}
+              style={[
+                upgradeStyles.planButton,
+                upgradeStyles.executivePlan,
+                selectedPlan === 'Executive' && upgradeStyles.planButtonSelected
+              ]}
+              onPress={() => setSelectedPlan('Executive')}
             >
               <MaterialIcons name="corporate-fare" size={24} color="#fff" />
               <Text style={upgradeStyles.planButtonText}>Executive</Text>
             </TouchableOpacity>
           </View>
+          
+          {/* Jey: New duration selection section - only visible for paid plans */}
+          {selectedPlan && selectedPlan !== 'Essentials' && (
+            <View style={upgradeStyles.durationContainer}>
+              <Text style={upgradeStyles.durationTitle}>Select Duration</Text>
+              <View style={upgradeStyles.durationOptions}>
+                <TouchableOpacity
+                  style={[
+                    upgradeStyles.durationButton,
+                    selectedDuration === 'Trial' && upgradeStyles.durationButtonSelected,
+                  ]}
+                  onPress={() => setSelectedDuration('Trial')}>
+                  <Text style={upgradeStyles.durationText}>Trial (15 days)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    upgradeStyles.durationButton,
+                    selectedDuration === 'Full' && upgradeStyles.durationButtonSelected,
+                  ]}
+                  onPress={() => setSelectedDuration('Full')}>
+                  <Text style={upgradeStyles.durationText}>Full (30 days)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    upgradeStyles.durationButton,
+                    selectedDuration === 'Other' && upgradeStyles.durationButtonSelected,
+                  ]}
+                  onPress={() => setSelectedDuration('Other')}>
+                  <Text style={upgradeStyles.durationText}>Other</Text>
+                </TouchableOpacity>
+              </View>
 
-          <TouchableOpacity
-            style={upgradeStyles.closeButton}
-            onPress={onClose}
-          >
-            <Text style={upgradeStyles.closeButtonText}>Cancel</Text>
-          </TouchableOpacity>
+              {selectedDuration === 'Other' && (
+                <TextInput
+                  style={upgradeStyles.customDaysInput}
+                  placeholder="Enter number of days"
+                  keyboardType="numeric"
+                  value={customDays}
+                  onChangeText={setCustomDays}
+                />
+              )}
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={upgradeStyles.actionButtonContainer}>
+            <TouchableOpacity
+              style={[upgradeStyles.actionButton, upgradeStyles.cancelButton]}
+              onPress={() => {
+                resetState();
+                onClose();
+              }}>
+              <Text style={upgradeStyles.actionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                upgradeStyles.actionButton,
+                upgradeStyles.upgradeButton,
+                (!selectedPlan || (selectedDuration === 'Other' && !customDays)) && upgradeStyles.actionButtonDisabled,
+              ]}
+              onPress={handleUpgradePress}
+              disabled={!selectedPlan || (selectedDuration === 'Other' && !customDays)}
+            >
+              <Text style={upgradeStyles.actionButtonText}>{selectedPlan === 'Essentials' ? 'Downgrade' : 'Upgrade'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -71,7 +179,7 @@ const upgradeStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalView: {
-    width: '80%',
+    width: '90%',
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 25,
@@ -83,10 +191,11 @@ const upgradeStyles = StyleSheet.create({
     elevation: 5,
   },
   modalTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
     color: '#333',
+    textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: 16,
@@ -121,18 +230,83 @@ const upgradeStyles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 10,
   },
-  closeButton: {
-    marginTop: 10,
-    backgroundColor: '#ddd',
-    padding: 12,
-    borderRadius: 10,
+  planButtonSelected: {
+    borderWidth: 3,
+    borderColor: '#FFD700', // Gold color to highlight selection
+  },
+  durationContainer: {
     width: '100%',
     alignItems: 'center',
+    marginTop: 20,
   },
-  closeButtonText: {
-    fontSize: 16,
+  durationTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  durationOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  durationButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    flex: 1,
+    marginHorizontal: 3,
+    alignItems: 'center',
+  },
+  durationButtonSelected: {
+    borderColor: '#3498db',
+    backgroundColor: '#e6f3ff',
+    borderWidth: 2,
+  },
+  durationText: {
+    fontSize: 12,
+    color: '#555',
+    textAlign: 'center',
+  },
+  customDaysInput: {
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 8,
+    width: '100%',
+    marginTop: 15,
+    paddingHorizontal: 15,
+    textAlign: 'center',
+  },
+  actionButtonContainer: {
+    flexDirection: 'row',
+    marginTop: 25,
+    width: '100%',
+    justifyContent: 'space-between',
+  },
+  actionButton: {
+    padding: 12,
+    borderRadius: 10,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  upgradeButton: {
+    backgroundColor: '#2ecc71',
+  },
+  cancelButton: {
+    backgroundColor: '#95a5a6',
+  },
+  actionButtonDisabled: {
+    backgroundColor: '#ddd',
+  },
+  actionButtonText: {
+    color: 'white',
     fontWeight: 'bold',
-    color: '#666',
+    fontSize: 16,
   },
 });
 

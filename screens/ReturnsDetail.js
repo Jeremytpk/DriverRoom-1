@@ -6,7 +6,8 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, 
+    limit, doc, updateDoc, deleteDoc, onSnapshot, getDoc } from 'firebase/firestore';
 
 const ReturnsDetail = () => {
   const route = useRoute();
@@ -14,45 +15,101 @@ const ReturnsDetail = () => {
   const { driverId } = route.params;
   
   const [returns, setReturns] = useState([]);
+  const [driver, setDriver] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchReturns = async () => {
-    setLoading(true);
+  const fetchDriverData = async () => {
     try {
-      const returnsQuery = query(
-        collection(db, 'returns'),
-        where('driverId', '==', driverId),
-        orderBy('timestamp', 'desc'),
-        limit(10) // Jey: Limiting to 10 for a cleaner list.
-      );
-      const querySnapshot = await getDocs(returnsQuery);
-      const returnsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setReturns(returnsList);
+      const driverRef = doc(db, 'users', driverId);
+      const driverSnap = await getDoc(driverRef);
+      if (driverSnap.exists()) {
+          setDriver(driverSnap.data());
+      }
     } catch (error) {
-      console.error("Jey: Error fetching returns details:", error);
-      Alert.alert("Error", "Failed to load returns data.");
-    } finally {
-      setLoading(false);
+        console.error("Jey: Error fetching driver data:", error);
     }
   };
 
   useEffect(() => {
-    fetchReturns();
+    fetchDriverData();
+
+    const returnsQuery = query(
+      collection(db, 'returns'),
+      where('driverId', '==', driverId)
+    );
+    
+    const unsubscribe = onSnapshot(returnsQuery, (snapshot) => {
+        
+        ////////TIME LIMIT//////////////////////////////////////////////////////////////
+      const oneMinuteAgo = new Date(Date.now() - 90000);
+      const returnsList = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(item => (item.timestamp?.toDate() || new Date(0)) > oneMinuteAgo);
+
+      returnsList.sort((a, b) => {
+          const aTimestamp = a.timestamp?.toDate() || new Date(0);
+          const bTimestamp = b.timestamp?.toDate() || new Date(0);
+          return bTimestamp.getTime() - aTimestamp.getTime();
+      });
+
+      setReturns(returnsList);
+      setLoading(false);
+    }, (error) => {
+      console.error("Jey: Error fetching returns details:", error);
+      Alert.alert("Error", "Failed to load returns data.");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [driverId]);
 
+  // Jey: New useEffect for automatic data deletion
+  useEffect(() => {
+    const deleteOldReturns = async () => {
+      try {
+        const oneMinuteAgo = new Date(Date.now() - 60000);
+        const returnsToDeleteQuery = query(
+          collection(db, 'returns'),
+          where('timestamp', '<', oneMinuteAgo)
+        );
+        
+        const querySnapshot = await getDocs(returnsToDeleteQuery);
+        if (!querySnapshot.empty) {
+          const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref));
+          await Promise.all(deletePromises);
+          console.log(`Jey: Deleted ${querySnapshot.docs.length} old return logs.`);
+        }
+      } catch (error) {
+        console.error("Jey: Error auto-deleting old return logs:", error);
+      }
+    };
+    
+    // Jey: Run the deletion function once every minute
+    const intervalId = setInterval(deleteOldReturns, 60000);
+    
+    // Jey: Clean up the interval when the component unmounts
+    return () => clearInterval(intervalId);
+  }, []);
+
   const handleRTS = () => {
+    if (!driver) return;
     Alert.alert(
       "Confirm Return to Station",
-      "Are you sure you want to mark this driver as returned to station?",
+      `Are you sure you want to mark ${driver.name} as returned to station?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Confirm",
-          onPress: () => {
-            // Jey: Placeholder for RTS functionality
-            Alert.alert("Success", "Driver marked as returned to station. Functionality to be implemented.");
-            // You can add logic here to update driver status to off-duty
-            // navigation.goBack();
+          onPress: async () => {
+            try {
+              const userRef = doc(db, 'users', driverId);
+              await updateDoc(userRef, { isRTSConfirmed: true });
+              Alert.alert("Success", `${driver.name} has been marked as returned to station.`);
+              navigation.goBack();
+            } catch (error) {
+              console.error("Jey: Error updating RTS status:", error);
+              Alert.alert("Error", "Failed to confirm return to station. Please try again.");
+            }
           },
         },
       ]
@@ -104,7 +161,7 @@ const ReturnsDetail = () => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={28} color="#666" />
         </TouchableOpacity>
-        <Text style={returnsDetailStyles.headerTitle}>Return Details</Text>
+        <Text style={returnsDetailStyles.headerTitle}>Return Details for {driver?.name}</Text>
         <View style={{ width: 28 }} />
       </View>
       <FlatList
@@ -148,13 +205,15 @@ const returnsDetailStyles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
+    marginLeft: 10,
   },
   listContent: {
     padding: 15,
-    paddingBottom: 80, // Space for the floating button
+    paddingBottom: 80,
   },
   returnCard: {
     backgroundColor: '#fff',
@@ -246,7 +305,7 @@ const returnsDetailStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF9AA2',
+    backgroundColor: '#1b9ca2',
     paddingVertical: 15,
     borderRadius: 10,
     shadowColor: '#000',
@@ -259,6 +318,21 @@ const returnsDetailStyles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 18,
+    marginLeft: 10,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF5733',
+    padding: 10,
+    borderRadius: 8,
+    marginHorizontal: 15,
+    marginBottom: 10,
+  },
+  deleteButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
     marginLeft: 10,
   },
 });

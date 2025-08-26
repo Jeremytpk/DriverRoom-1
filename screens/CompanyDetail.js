@@ -69,31 +69,40 @@ const CompanyDetailScreen = ({ route, navigation }) => {
     setIsUpgradeModalVisible(true);
   };
 
-  const handleUpgrade = async (plan) => {
-  try {
-    const companyRef = doc(db, 'companies', companyId);
-    const companyDoc = await getDoc(companyRef);
-    const companyData = companyDoc.data();
-    
-    // Check if the dspUserId exists before trying to create a reference
-    if (!companyData.dspUserId) {
-        throw new Error("DSP Admin not assigned to this company.");
+  const handleUpgrade = async (plan, days) => {
+    try {
+      const companyRef = doc(db, 'companies', companyId);
+      const companyDoc = await getDoc(companyRef);
+      const companyData = companyDoc.data();
+      
+      if (!companyData.dspUserId) {
+          throw new Error("DSP Admin not assigned to this company.");
+      }
+      
+      const userRef = doc(db, 'users', companyData.dspUserId);
+      
+      // Jey: Calculate the expiration date
+      const expirationDate = new Date();
+      expirationDate.setDate(expirationDate.getDate() + days);
+
+      const batch = writeBatch(db);
+      batch.update(companyRef, { 
+        plan: plan,
+        planExpiresAt: expirationDate.toISOString(), // Store as ISO string
+      });
+      batch.update(userRef, { 
+        plan: plan,
+        planExpiresAt: expirationDate.toISOString(),
+      });
+      await batch.commit();
+
+      Alert.alert("Success", `Company plan updated to ${plan} for ${days} days.`);
+      fetchData();
+    } catch (error) {
+      console.error("Jey: Error updating company plan:", error);
+      Alert.alert("Error", "Failed to update company plan. Please try again.");
     }
-    
-    const userRef = doc(db, 'users', companyData.dspUserId);
-
-    const batch = writeBatch(db);
-    batch.update(companyRef, { plan: plan });
-    batch.update(userRef, { plan: plan });
-    await batch.commit();
-
-    Alert.alert("Success", `Company plan updated to ${plan}.`);
-    fetchData();
-  } catch (error) {
-    console.error("Jey: Error updating company plan:", error);
-    Alert.alert("Error", "Failed to update company plan. Please try again.");
-  }
-};
+  };
 
   const handleAssignDSP = async (user, company) => {
     Alert.alert(
@@ -233,6 +242,7 @@ const CompanyDetailScreen = ({ route, navigation }) => {
 
   const isDSPAssigned = !!company.dspUserId;
   const assignedDSP = isDSPAssigned ? allUsers.find(user => user.id === company.dspUserId) : null;
+  const planExpirationDate = company.planExpiresAt ? new Date(company.planExpiresAt) : null;
 
   return (
     <View style={companyDetailStyles.container}>
@@ -273,11 +283,16 @@ const CompanyDetailScreen = ({ route, navigation }) => {
           </View>
         </View>
         
-        {/* Jey: The new subscription plan card */}
+        {/* Jey: The new subscription plan card with expiration date */}
         {companyPlan && (
             <View style={companyDetailStyles.planCard}>
                 <Text style={companyDetailStyles.planTitle}>Subscription Plan</Text>
                 <Text style={companyDetailStyles.planValue}>{companyPlan}</Text>
+                {planExpirationDate && (
+                    <Text style={companyDetailStyles.planExpiration}>
+                        Expires: {planExpirationDate.toLocaleDateString()}
+                    </Text>
+                )}
             </View>
         )}
         
@@ -464,6 +479,11 @@ const companyDetailStyles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#6BB9F0',
+  },
+  planExpiration: {
+      fontSize: 14,
+      color: '#888',
+      marginTop: 5,
   },
   buttonContainer: {
     flexDirection: 'row',

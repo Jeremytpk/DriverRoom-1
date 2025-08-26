@@ -3,8 +3,9 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, Image, ScrollView, RefreshControl, TextInput
 } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons'; 
 import { db } from '../firebase';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, getDocs, where, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import CompanyModal from '../components/CompanyModal';
 import AssignDSPModal from '../components/AssignDSPModal';
@@ -27,10 +28,7 @@ const AdminScreen = ({ navigation }) => {
   const [selectedCompanyForDSP, setSelectedCompanyForDSP] = useState(null);
   
   const [loggedInUser, setLoggedInUser] = useState(null);
-
-  const getUserId = () => {
-    return 'nGpRSSIgZZeZExkZWDxRS80z8A3';
-  };
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -54,14 +52,9 @@ const AdminScreen = ({ navigation }) => {
       setCompanies(companiesData);
       setDrivers(driversData);
 
-      const currentUserId = getUserId();
-      const currentUserData = allUsersData.find(user => user.id === currentUserId);
-      setLoggedInUser(currentUserData || { name: 'Admin User', photoURL: null });
-
     } catch (error) {
       console.error("Jey: Error fetching admin data:", error);
       Alert.alert("Error", "Failed to load admin data. Please try again.");
-      setLoggedInUser({ name: 'Admin User', photoURL: null });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -69,7 +62,31 @@ const AdminScreen = ({ navigation }) => {
   }, []);
 
   useEffect(() => {
+    const auth = getAuth();
+    
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setLoggedInUser({ id: userDoc.id, ...userDoc.data() });
+          } else {
+            console.warn("Jey: No user profile found in Firestore for UID:", user.uid);
+            setLoggedInUser({ name: 'Admin User', photoURL: null });
+          }
+        } catch (error) {
+          console.error("Jey: Error fetching user profile:", error);
+          setLoggedInUser({ name: 'Admin User', photoURL: null });
+        }
+      } else {
+        setLoggedInUser(null);
+      }
+      setIsProfileLoading(false);
+    });
+
     fetchData();
+
+    return () => unsubscribe();
   }, [fetchData]);
 
   const handleRefresh = () => {
@@ -377,8 +394,8 @@ const AdminScreen = ({ navigation }) => {
         return null;
     }
   };
-
-  if (loading) {
+  
+  if (loading || isProfileLoading) {
     return (
       <View style={styles.centeredContainer}>
         <ActivityIndicator size="large" color="#6BB9F0" />
@@ -391,8 +408,8 @@ const AdminScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerProfile}>
-          {loggedInUser?.photoURL ? (
-            <Image source={{ uri: loggedInUser.photoURL }} style={styles.profileImage} />
+          {loggedInUser?.profilePictureUrl ? (
+            <Image source={{ uri: loggedInUser.profilePictureUrl }} style={styles.profileImage} />
           ) : (
             <MaterialIcons name="account-circle" size={40} color="#666" />
           )}

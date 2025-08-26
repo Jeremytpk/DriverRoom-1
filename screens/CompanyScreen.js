@@ -602,7 +602,7 @@ const CompanyScreen = ({ navigation }) => {
               onPress={() => navigation.navigate('Settings')}
             >
               <MaterialIcons name="settings" size={24} color="#6BB9F0" />
-              <Text style={styles.moreOptionText}>Company Settings</Text>
+              <Text style={styles.moreOptionText}>Settings</Text>
             </TouchableOpacity>
           </ScrollView>
         );
