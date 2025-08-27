@@ -20,7 +20,6 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
   const reasons = ['Business Closed', 'Access Problem', 'Customer Unavailable', 'Other'];
 
   useEffect(() => {
-    // Jey: Fetch the current driver's data to get the DSP ID
     const fetchDriverData = async () => {
         try {
             const auth = getAuth();
@@ -62,8 +61,8 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
       }
     }
     
-    // Jey: Check if driver data is available and has a DSP assigned
-    if (!driverData || !driverData.dspUserId) {
+    // Jey: UPDATED - Check for dspName instead of dspUserId
+    if (!driverData || !driverData.dspName) {
       Alert.alert('Error', 'No DSP is assigned to this driver. Cannot log returns.');
       onClose();
       return;
@@ -76,19 +75,18 @@ const ReturnsModal = ({ visible, onClose, onLogReturns }) => {
     }
 
     try {
-        // Jey: Create a new document in the 'returns' collection to trigger a notification
         await addDoc(collection(db, 'returns'), {
             driverId: getAuth().currentUser.uid,
             driverName: driverData.name,
-            dspId: driverData.dspUserId,
+            // Jey: UPDATED - Save the dspName to the returns log for consistency
+            dspName: driverData.dspName,
             hasReturns,
             returnCount: hasReturns ? parseInt(returnCount) : 0,
             reasons: hasReturns ? reasonsToLog : [],
             timestamp: serverTimestamp(),
-            notified: false, // Jey: Add a flag for the cloud function to use
+            notified: false,
         });
 
-        // Jey: Call the parent's onLogReturns function with the updated data
         await onLogReturns({
             hasReturns,
             returnCount: hasReturns ? parseInt(returnCount) : 0,

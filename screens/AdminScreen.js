@@ -244,6 +244,25 @@ const AdminScreen = ({ navigation }) => {
     const plan = item.plan || 'Essentials';
     const planColor = getPlanColor(plan);
 
+    // Jey: ADDED - Logic to calculate remaining days
+    let remainingDaysText = null;
+    if (item.planExpiresAt) {
+      const expirationDate = new Date(item.planExpiresAt);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Compare against the start of today
+      
+      const diffTime = expirationDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      if (diffDays > 0) {
+        remainingDaysText = `${diffDays} days left`;
+      } else if (diffDays === 0) {
+        remainingDaysText = 'Expires today';
+      } else {
+        remainingDaysText = 'Expired';
+      }
+    }
+
     return (
       <TouchableOpacity onPress={() => navigateToCompanyDetail(item.id)} style={styles.card}>
         <View style={styles.cardHeader}>
@@ -251,8 +270,15 @@ const AdminScreen = ({ navigation }) => {
             <MaterialIcons name="business" size={24} color="#6BB9F0" />
             <Text style={styles.cardTitle}>{item.name || 'No Name'}</Text>
           </View>
-          <View style={[styles.planLabel, { backgroundColor: planColor }]}>
-            <Text style={styles.planLabelText}>{plan}</Text>
+          {/* Jey: UPDATED - Wrapped plan info in a container for alignment */}
+          <View style={styles.planContainer}>
+            <View style={[styles.planLabel, { backgroundColor: planColor }]}>
+              <Text style={styles.planLabelText}>{plan}</Text>
+            </View>
+            {/* Jey: ADDED - Display the remaining days text if it exists */}
+            {remainingDaysText && (
+              <Text style={styles.remainingDaysText}>{remainingDaysText}</Text>
+            )}
           </View>
         </View>
         <View style={styles.cardRow}>
@@ -601,7 +627,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start', // Jey: Changed to flex-start for alignment
     marginBottom: 10,
     justifyContent: 'space-between',
   },
@@ -615,6 +641,10 @@ const styles = StyleSheet.create({
     color: '#6BB9F0',
     marginLeft: 10,
   },
+  // Jey: ADDED - New styles for the plan container and remaining days text
+  planContainer: {
+    alignItems: 'flex-end',
+  },
   planLabel: {
     borderRadius: 15,
     paddingHorizontal: 10,
@@ -625,6 +655,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     textTransform: 'uppercase',
+  },
+  remainingDaysText: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   cardRow: {
     flexDirection: 'row',

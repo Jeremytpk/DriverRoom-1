@@ -405,7 +405,7 @@ const HomeScreen = ({ navigation }) => {
         <MaterialIcons name="local-shipping" size={100} color={Colors.primaryTeal} />
         <Text style={styles.rtsConfirmedTitle}>Route Completed!</Text>
         <Text style={styles.rtsConfirmedMessage}>
-          Your route for today has been safely completed. Your DSP has confirmed your return to the station. Thank you!
+          Your route for today has been safely completed. You can safely your return to the station. Thank you!
         </Text>
         <TouchableOpacity style={styles.rtsConfirmedButton} onPress={handleAcknowledgeRTS}>
           <Text style={styles.rtsConfirmedButtonText}>Acknowledge</Text>
