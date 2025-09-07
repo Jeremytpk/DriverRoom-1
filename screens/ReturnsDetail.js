@@ -41,7 +41,7 @@ const ReturnsDetail = () => {
     const unsubscribe = onSnapshot(returnsQuery, (snapshot) => {
         
         ////////TIME LIMIT//////////////////////////////////////////////////////////////
-      const oneMinuteAgo = new Date(Date.now() - 60000);
+      const oneMinuteAgo = new Date(Date.now() - 3600000);
       const returnsList = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(item => (item.timestamp?.toDate() || new Date(0)) > oneMinuteAgo);

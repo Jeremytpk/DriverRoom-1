@@ -15,7 +15,8 @@ import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 const AssignDSPModal = ({ visible, onClose, users, company, onAssign }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredUsers, setFilteredUsers] = useState([]);
-  const [assigning, setAssigning] = useState(false); // Jey: State for showing loading during assignment
+  const [selectedUsers, setSelectedUsers] = useState([]); // Jey: State to hold multiple selected users
+  const [assigning, setAssigning] = useState(false);
 
   // Jey: Filter users based on search query or show all if no query
   useEffect(() => {
@@ -26,50 +27,62 @@ const AssignDSPModal = ({ visible, onClose, users, company, onAssign }) => {
       );
       setFilteredUsers(filtered);
     } else {
-      setFilteredUsers(users); // Jey: Show all users if search query is empty
+      setFilteredUsers(users);
     }
   }, [searchQuery, users]);
 
-  // Jey: Reset search query when modal opens/closes
+  // Jey: Reset state when modal opens/closes
   useEffect(() => {
     if (!visible) {
       setSearchQuery('');
+      setSelectedUsers([]); // Jey: Clear selected users when the modal closes
     }
   }, [visible]);
 
-  // Jey: Handle the assignment process
-  const handleAssignPress = async (user) => {
+  // Jey: Toggle user selection
+  const toggleUserSelection = (user) => {
+    if (selectedUsers.some(u => u.id === user.id)) {
+      setSelectedUsers(selectedUsers.filter(u => u.id !== user.id));
+    } else {
+      setSelectedUsers([...selectedUsers, user]);
+    }
+  };
+
+  // Jey: Handle the final assignment process for all selected users
+  const handleConfirmAssignment = async () => {
+    if (selectedUsers.length === 0) {
+      return;
+    }
     setAssigning(true);
     try {
-      await onAssign(user, company); // Jey: Call the onAssign function passed from AdminScreen
-      onClose(); // Jey: Close modal on successful assignment
+      await onAssign(selectedUsers); // Jey: Pass the array of selected users to onAssign
+      onClose();
     } catch (error) {
       console.error("Jey: Error during DSP assignment:", error);
-      // Jey: Alert is handled in AdminScreen's handleAssignDSP, no need for another here
     } finally {
       setAssigning(false);
     }
   };
 
-  const renderUserItem = ({ item }) => (
-    <View style={styles.userItem}>
-      <View style={styles.userInfo}>
-        <MaterialIcons name="person-outline" size={24} color="#6BB9F0" />
-        <Text style={styles.userName}>{item.name || item.email}</Text>
-      </View>
+  const renderUserItem = ({ item }) => {
+    const isSelected = selectedUsers.some(u => u.id === item.id);
+    return (
       <TouchableOpacity
-        style={styles.assignButton}
-        onPress={() => handleAssignPress(item)}
-        disabled={assigning} // Jey: Disable button during assignment
+        style={[styles.userItem, isSelected && styles.userItemAssigned]}
+        onPress={() => toggleUserSelection(item)}
       >
-        {assigning ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.assignButtonText}>Assign</Text>
+        <View style={styles.userInfo}>
+          <MaterialIcons name="person-outline" size={24} color={isSelected ? "#fff" : "#6BB9F0"} />
+          <Text style={[styles.userName, isSelected && styles.userNameAssigned]}>
+            {item.name || item.email}
+          </Text>
+        </View>
+        {isSelected && (
+          <MaterialIcons name="check-circle" size={24} color="#fff" />
         )}
       </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <Modal
@@ -106,6 +119,20 @@ const AssignDSPModal = ({ visible, onClose, users, company, onAssign }) => {
             }
             contentContainerStyle={styles.listContentContainer}
           />
+
+          <TouchableOpacity
+            style={[styles.confirmButton, selectedUsers.length === 0 && styles.confirmButtonDisabled]}
+            onPress={handleConfirmAssignment}
+            disabled={selectedUsers.length === 0 || assigning}
+          >
+            {assigning ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.confirmButtonText}>
+                {`Assign ${selectedUsers.length} User(s)`}
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </Modal>
@@ -117,7 +144,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)', // Jey: Dark overlay
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalView: {
     margin: 20,
@@ -125,7 +152,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 25,
     width: '90%',
-    maxHeight: '80%', // Jey: Limit height for better mobile experience
+    maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -178,6 +205,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eee',
   },
+  userItemAssigned: {
+    backgroundColor: '#6BB9F0',
+    borderColor: '#6BB9F0',
+  },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -189,19 +220,24 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: '#333',
   },
-  assignButton: {
-    backgroundColor: '#FF9AA2',
-    paddingVertical: 8,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    minWidth: 80, // Jey: Ensure consistent button size
+  userNameAssigned: {
+    color: '#fff',
+  },
+  confirmButton: {
+    backgroundColor: '#2ecc71',
+    paddingVertical: 15,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 15,
   },
-  assignButtonText: {
+  confirmButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  confirmButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 16,
   },
   emptyListText: {
     textAlign: 'center',

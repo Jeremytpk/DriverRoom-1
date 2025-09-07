@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -76,7 +76,7 @@ const Settings = () => {
           </View>
         </View>
 
-        {/* Menu Section */}
+        {/* General Menu Section */}
         <View style={styles.menu}>
           <Text style={styles.menuSectionTitle}>General</Text>
 
@@ -91,20 +91,41 @@ const Settings = () => {
             <Text style={styles.menuText}>Privacy & Security</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
-          {/* Jey: Updated Feedback button to navigate to FeedBack.js */}
+          
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('FeedBack')}>
             <Image source={rate_half} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Feedback</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
+        </View>
 
-          {/* Logout Button - Visually distinct */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Image source={logoutIcon} style={styles.logoutIcon} />
-            <Text style={styles.logoutButtonText}>Logout</Text>
+        {/* Support & Legal Menu Section */}
+        <View style={styles.menu}>
+          <Text style={styles.menuSectionTitle}>Support & Legal</Text>
+          <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL('https://driverroom.dev/privacy')}>
+            <Ionicons name="shield-checkmark-outline" size={24} color={Colors.primaryTeal} />
+            <Text style={styles.menuText}>Privacy Policy</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL('https://driverroom.dev/terms')}>
+            <Ionicons name="document-text-outline" size={24} color={Colors.primaryTeal} />
+            <Text style={styles.menuText}>Terms of Service</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL('https://driverroom.dev/contact')}>
+            <Ionicons name="mail-outline" size={24} color={Colors.primaryTeal} />
+            <Text style={styles.menuText}>Contact Us</Text>
+            <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
         </View>
+
+        {/* Logout Button - Visually distinct */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Image source={logoutIcon} style={styles.logoutIcon} />
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -207,6 +228,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 3,
     overflow: 'hidden',
+    marginBottom: 20,
   },
   menuSectionTitle: {
     fontSize: 16,

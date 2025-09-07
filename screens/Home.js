@@ -877,7 +877,7 @@ const HomeWrapper = () => {
             updateIsOnDuttyStatus(false);
 
 //////////////TIME OUT////////////////////////////////////////////////////////////////////////////
-          }, 100000);
+          }, 32400000);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);

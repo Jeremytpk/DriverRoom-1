@@ -661,6 +661,13 @@ const CompanyScreen = ({ navigation }) => {
               size={24}
               color={activeTab === tab ? '#FF9AA2' : '#666'}
             />
+            {/* Jey: This is the new notification badge for the requests tab. */}
+            {tab === 'requests' && pendingDrivers.length > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationText}>{pendingDrivers.length}</Text>
+              </View>
+            )}
+            {/* End of new badge code */}
             <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
               {tab === 'more' ? 'More' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
@@ -802,6 +809,24 @@ const styles = StyleSheet.create({
     color: '#FF9AA2',
     fontWeight: 'bold',
   },
+  // Jey: New styles for the notification badge
+  notificationBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 25,
+    backgroundColor: '#FF5733',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  // End of new styles
   content: {
     flex: 1,
     padding: 15,
