@@ -23,10 +23,13 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // Jey: Added new state for password visibility
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false); 
   const { login } = useAuth();
   const navigation = useNavigation();
 
   const handleLogin = async () => {
+    // ... (rest of the handleLogin function is unchanged)
     if (!email || !password) {
       Alert.alert('Error', 'Please enter both email and password');
       return;
@@ -51,12 +54,11 @@ const Login = () => {
 
       const userDataFromFirestore = userDocSnap.data();
 
-      // Jey: Updated navigation logic to handle isTrainer role
       if (userDataFromFirestore?.isAdmin) {
         navigation.navigate('AdminScreen');
       } else if (userDataFromFirestore?.isDsp) {
         navigation.navigate('CompanyScreen');
-      } else if (userDataFromFirestore?.isTrainer) { // Jey: If user is a trainer, navigate to Home
+      } else if (userDataFromFirestore?.isTrainer) {
         navigation.navigate('Home');
       } else if (userDataFromFirestore?.role === 'driver') {
         if (userDataFromFirestore?.activated && userDataFromFirestore?.isOnDutty) {
@@ -77,8 +79,8 @@ const Login = () => {
   };
 
   const handleLoginError = (error) => {
+    // ... (handleLoginError function is unchanged)
     let errorMessage = 'Login failed. Please try again.';
-
     switch(error.code) {
       case 'auth/invalid-credential':
         errorMessage = 'Invalid email or password combination';
@@ -101,7 +103,6 @@ const Login = () => {
       default:
         errorMessage = error.message || errorMessage;
     }
-
     Alert.alert('Login Error', errorMessage);
   };
 
@@ -134,14 +135,27 @@ const Login = () => {
               autoCorrect={false}
             />
 
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#888"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            {/* Jey: This is the new password input with the visibility toggle */}
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Password"
+                placeholderTextColor="#888"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!isPasswordVisible} // Jey: Controlled by state
+              />
+              <TouchableOpacity
+                onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons
+                  name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+                  size={24}
+                  color="#888"
+                />
+              </TouchableOpacity>
+            </View>
             
             <TouchableOpacity
               style={styles.forgotPasswordButton}
@@ -176,6 +190,7 @@ const Login = () => {
 };
 
 const styles = StyleSheet.create({
+  // ... (safeArea, container, scrollContent, header, logo, title, subtitle, formContainer are unchanged)
   safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -231,6 +246,33 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
+  // Jey: New styles for the password input container and icon
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 55,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    backgroundColor: '#F8F8F8',
+    marginBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 20,
+    fontSize: 16,
+    color: '#333333',
+  },
+  eyeIcon: {
+    paddingHorizontal: 15,
+  },
+  // Jey: Rest of the styles are unchanged
   loginButton: {
     height: 55,
     backgroundColor: '#6BB9F0',
