@@ -134,6 +134,7 @@ const OnDutty = ({ navigation }) => {
         return () => unsubscribe();
     }, [userData?.uid]);
 
+    // Jey: Updated to reset 'isRescuing' status
     const handleRemoveFromOnDuty = (userId, userName) => {
         Alert.alert(
             "Remove User",
@@ -145,7 +146,7 @@ const OnDutty = ({ navigation }) => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', userId);
-                            await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
+                            await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false });
                             Alert.alert("Success", `${userName} has been moved to Off-Duty.`);
                             setSelectedUsers(prev => {
                                 const newSet = new Set(prev);
@@ -186,6 +187,7 @@ const OnDutty = ({ navigation }) => {
         }
     };
     
+    // Jey: Updated to reset 'isRescuing' status for all selected users
     const handleMassOffDuty = () => {
         if (selectedUsers.size === 0) {
             Alert.alert("No Users Selected", "Please select at least one user to move off-duty.");
@@ -203,7 +205,7 @@ const OnDutty = ({ navigation }) => {
                         try {
                             const updates = Array.from(selectedUsers).map(async (userId) => {
                                 const userRef = doc(db, 'users', userId);
-                                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false });
+                                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false });
                             });
                             await Promise.all(updates);
                             setSelectedUsers(new Set());
@@ -240,7 +242,6 @@ const OnDutty = ({ navigation }) => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', driver.id);
-                            // Jey: Set isRTSConfirmed to true
                             await updateDoc(userRef, { isRTSConfirmed: true });
                             Alert.alert("Success", `Confirmation sent to ${driver.name}.`);
                             setSelectedUserForRescue(null);
@@ -270,7 +271,6 @@ const OnDutty = ({ navigation }) => {
         };
         
         const hasReturns = returnsCache[item.id] && returnsCache[item.id].length > 0;
-        // Jey: New conditional check for the eye icon
         const showEyeIcon = hasReturns && !item.isRTSConfirmed;
 
         return (
@@ -296,6 +296,8 @@ const OnDutty = ({ navigation }) => {
                         <View style={styles.userNameContainer}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.userName}>{item.name}</Text>
+                                {/* Jey: This is the new visual indicator for a user on a rescue */}
+                                {item.isRescuing && <View style={styles.rescueIndicator} />}
                                 {isTrainer && (
                                     <View style={styles.trainerLabel}>
                                         <Text style={styles.trainerLabelText}>Trainer</Text>
@@ -411,12 +413,12 @@ const OnDutty = ({ navigation }) => {
                 contentContainerStyle={styles.listContent}
             />
             <RescueModal
-    visible={isRescueModalVisible}
-    onClose={() => setIsRescueModalVisible(false)}
-    onDispatch={handleDispatchRescue}
-    allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
-    rescuer={selectedUserForRescue}
-/>
+                visible={isRescueModalVisible}
+                onClose={() => setIsRescueModalVisible(false)}
+                onDispatch={handleDispatchRescue}
+                allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
+                rescuer={selectedUserForRescue}
+            />
         </View>
     );
 };
@@ -614,6 +616,19 @@ const styles = StyleSheet.create({
         marginRight: 10,
         paddingLeft: 5,
         paddingTop: 4,
+    },
+    // Jey: New style for the rescue indicator dot
+    rescueIndicator: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#007bff', // A distinct blue color
+        marginLeft: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 1,
+        elevation: 2,
     },
 });
 

@@ -30,6 +30,7 @@ const ReturnsDetail = () => {
     }
   };
 
+  // Jey: This useEffect block contains the updated de-duplication logic
   useEffect(() => {
     fetchDriverData();
 
@@ -40,19 +41,35 @@ const ReturnsDetail = () => {
     
     const unsubscribe = onSnapshot(returnsQuery, (snapshot) => {
         
-        ////////TIME LIMIT//////////////////////////////////////////////////////////////
       const oneMinuteAgo = new Date(Date.now() - 3600000);
       const returnsList = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(item => (item.timestamp?.toDate() || new Date(0)) > oneMinuteAgo);
+      
+      // Jey: --- THIS IS THE REVISED DE-DUPLICATION LOGIC ---
+      const uniqueReturnsMap = new Map();
+      returnsList.forEach(item => {
+        const d = item.timestamp?.toDate();
+        // A key to identify duplicates by rounding the timestamp to the minute, not the second.
+        const timestampInMinutes = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()).getTime() : 0;
+        const uniqueKey = `${timestampInMinutes}-${item.returnCount}-${JSON.stringify(item.reasons)}`;
+        
+        // This will now only add the FIRST entry it finds for a given minute with the same content.
+        if (!uniqueReturnsMap.has(uniqueKey)) {
+          uniqueReturnsMap.set(uniqueKey, item);
+        }
+      });
+      
+      const deDuplicatedList = Array.from(uniqueReturnsMap.values());
+      // --- END OF REVISED LOGIC ---
 
-      returnsList.sort((a, b) => {
+      deDuplicatedList.sort((a, b) => {
           const aTimestamp = a.timestamp?.toDate() || new Date(0);
           const bTimestamp = b.timestamp?.toDate() || new Date(0);
           return bTimestamp.getTime() - aTimestamp.getTime();
       });
 
-      setReturns(returnsList);
+      setReturns(deDuplicatedList);
       setLoading(false);
     }, (error) => {
       console.error("Jey: Error fetching returns details:", error);

@@ -369,7 +369,8 @@ const HomeScreen = ({ navigation }) => {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { isRTSConfirmed: false, isOnDutty: false, isCheckedIn: false }); 
-    } catch (error) {
+    } catch (error)
+      {
       console.error("Jey: Error acknowledging RTS:", error);
       Alert.alert("Error", "Failed to acknowledge return to station. Please try again.");
     }
@@ -381,6 +382,11 @@ const HomeScreen = ({ navigation }) => {
       const db = getFirestore();
       const rescueRef = doc(db, 'rescues', rescueRequest.id);
       await updateDoc(rescueRef, { status: 'acknowledged' });
+
+      // Jey: This is the new block to set the 'isRescuing' flag on the user's profile
+      const userRef = doc(db, 'users', userData.uid);
+      await updateDoc(userRef, { isRescuing: true });
+
       setRescueRequest(null);
       Alert.alert("Rescue Acknowledged", "You have acknowledged the rescue request. Stay safe!");
     } catch (error) {
@@ -803,11 +809,9 @@ const PendingApprovalScreen = ({ navigation }) => {
   );
 };
 
-// Jey: --- THIS IS THE UPDATED COMPONENT ---
 const HomeWrapper = () => {
   const { userData, loading, setUserData } = useAuth();
   const navigation = useNavigation();
-  // Corrected the typo in the state setter from 'setLocalIsOnDutty...'
   const [localIsOnDutyOrTrainerStatus, setLocalIsOnDutyOrTrainerStatus] = useState(false);
   const [showFloatingButton, setShowFloatingButton] = useState(false);
   const fixedTimerRef = useRef(null);
@@ -817,7 +821,6 @@ const HomeWrapper = () => {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       try {
-        // Note: The database field is still 'isOnDutty'. This change only affects the client-side code.
         await updateDoc(userRef, { isOnDutty: status });
         console.log(`Jey: User status updated to ${status}.`);
       } catch (error) {
@@ -865,7 +868,6 @@ const HomeWrapper = () => {
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Using the corrected function name here.
         setLocalIsOnDutyOrTrainerStatus(data.isOnDutty || false);
 
         if (data.isOnDutty) {
@@ -885,12 +887,10 @@ const HomeWrapper = () => {
         }
       } else {
         console.warn("Jey: User document not found during isOnDutty listener for UID:", userData.uid);
-        // Using the corrected function name here.
         setLocalIsOnDutyOrTrainerStatus(false);
       }
     }, (error) => {
       console.error("Jey: Error listening to user's isOnDutty status:", error);
-      // Using the corrected function name here.
       setLocalIsOnDutyOrTrainerStatus(false);
     });
 
