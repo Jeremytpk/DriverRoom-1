@@ -1,7 +1,7 @@
 // Add this import at the very top
 import 'react-native-get-random-values';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -53,6 +53,10 @@ const AddGateCodeModal = ({
   const [dspSearchQuery, setDspSearchQuery] = useState('');
   const [filteredDsps, setFilteredDsps] = useState([]);
 
+  // Jey: Create refs for inputs to manage focus on web
+  const locationInputRef = useRef(null);
+  const codeInputRef = useRef(null);
+
   useEffect(() => {
     if (visible) {
       if (!isAdmin) {
@@ -68,6 +72,11 @@ const AddGateCodeModal = ({
       setImageUri(null);
       setDspSearchQuery('');
       setFilteredDsps(dsps);
+
+      // Jey: Programmatically focus on the first input when the modal opens on web
+      if (Platform.OS === 'web' && locationInputRef.current) {
+        locationInputRef.current.focus();
+      }
     }
   }, [visible, isAdmin, userDspId, currentDspName, dsps]);
 
@@ -198,7 +207,7 @@ const AddGateCodeModal = ({
     setSelectedDspId(dsp.id);
     setSelectedDspName(dsp.name);
     setIsDspPickerVisible(false);
-    Keyboard.dismiss();
+    Keyboard.dismiss(); // Jey: Still good practice for mobile
   };
 
   const renderDspItem = ({ item }) => (
@@ -222,6 +231,8 @@ const AddGateCodeModal = ({
       visible={visible}
       onRequestClose={handleClose}
     >
+      {/* Jey: Use 'Pressable' or simple 'View' on web to handle clicks outside the modal
+          'TouchableWithoutFeedback' is primarily for mobile gestures. */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.centeredView}>
           <ScrollView contentContainerStyle={styles.modalView}>
@@ -259,13 +270,17 @@ const AddGateCodeModal = ({
             </TouchableOpacity>
 
             <TextInput
+              ref={locationInputRef} // Jey: Add ref to the location input
               style={styles.input}
               placeholder="Location/Complex Name *"
               value={location}
               onChangeText={setLocation}
               placeholderTextColor="#999"
+              // Jey: For web, enable autoFocus for a better UX
+              autoFocus={Platform.OS === 'web'}
             />
             <TextInput
+              ref={codeInputRef} // Jey: Add ref to the code input
               style={styles.input}
               placeholder="Gate Code *"
               value={code}
@@ -280,6 +295,8 @@ const AddGateCodeModal = ({
               multiline
               numberOfLines={4}
               placeholderTextColor="#999"
+              // Jey: On web, we can also manage focus on this input.
+              onFocus={() => { if (Platform.OS === 'web') notesInputRef.current?.focus(); }}
             />
 
             <View style={styles.buttonContainer}>
@@ -317,6 +334,8 @@ const AddGateCodeModal = ({
                       value={dspSearchQuery}
                       onChangeText={setDspSearchQuery}
                       clearButtonMode="while-editing"
+                      // Jey: Add autoFocus for the search input on the web
+                      autoFocus={Platform.OS === 'web'}
                     />
                     <FlatList
                       data={filteredDsps}
@@ -362,6 +381,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     width: '90%',
+    maxWidth: Platform.OS === 'web' ? 500 : '90%', // Jey: Add a max-width for better web layout
     maxHeight: '85%',
   },
   modalTitle: {
@@ -433,6 +453,15 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({ // Jey: Add hover effect for better web UX
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        ':hover': {
+          backgroundColor: '#5ca3e0',
+        },
+      },
+    }),
   },
   cancelButton: {
     backgroundColor: '#ccc',
@@ -442,6 +471,15 @@ const styles = StyleSheet.create({
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({ // Jey: Add hover effect
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        ':hover': {
+          backgroundColor: '#bbb',
+        },
+      },
+    }),
   },
   buttonText: {
     color: 'white',
@@ -469,6 +507,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    ...Platform.select({ // Jey: Add hover effect
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        ':hover': {
+          backgroundColor: '#f1f1f1',
+        },
+      },
+    }),
   },
   dspSelectButtonText: {
     fontSize: 16,
@@ -508,6 +555,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 20,
     width: '85%',
+    maxWidth: Platform.OS === 'web' ? 400 : '85%',
     maxHeight: '70%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -540,6 +588,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    ...Platform.select({ // Jey: Add hover effect
+      web: {
+        cursor: 'pointer',
+        ':hover': {
+          backgroundColor: '#f5f5f5',
+        },
+      },
+    }),
   },
   dspListItemName: {
     fontSize: 16,
@@ -561,6 +617,15 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     alignItems: 'center',
+    ...Platform.select({ // Jey: Add hover effect
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        ':hover': {
+          backgroundColor: '#e58a92',
+        },
+      },
+    }),
   },
   dspPickerCloseButtonText: {
     color: 'white',

@@ -46,7 +46,7 @@ const ReturnsDetail = () => {
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(item => (item.timestamp?.toDate() || new Date(0)) > oneMinuteAgo);
       
-      // Jey: --- THIS IS THE REVISED DE-DUPLICATION LOGIC ---
+        
       const uniqueReturnsMap = new Map();
       returnsList.forEach(item => {
         const d = item.timestamp?.toDate();
