@@ -1,4 +1,3 @@
-// Add this import at the very top
 import 'react-native-get-random-values';
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,7 +14,7 @@ import {
   ActivityIndicator,
   ScrollView,
   FlatList,
-  TouchableWithoutFeedback,
+  TouchableWithoutFeedback, // Jey: Keep this import
   Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,13 +23,9 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { Ionicons } from '@expo/vector-icons';
-// Jey: Import encryption library
 import CryptoJS from 'crypto-js';
 
-// Jey: IMPORTANT: For this in-code encryption, the key is here. In a production
-// environment, this key should be obfuscated or fetched from a secure source.
-// Ensure this key is exactly 32 bytes long for AES-256 encryption.
-const ENCRYPTION_KEY = "Jertopak-98-61-80"; // Jey: Use a 32-byte key
+const ENCRYPTION_KEY = "Jertopak-98-61-80"; 
 
 const AddGateCodeModal = ({
   visible,
@@ -53,9 +48,9 @@ const AddGateCodeModal = ({
   const [dspSearchQuery, setDspSearchQuery] = useState('');
   const [filteredDsps, setFilteredDsps] = useState([]);
 
-  // Jey: Create refs for inputs to manage focus on web
   const locationInputRef = useRef(null);
   const codeInputRef = useRef(null);
+  const notesInputRef = useRef(null); // Jey: It's good practice to have a ref for all inputs
 
   useEffect(() => {
     if (visible) {
@@ -73,7 +68,6 @@ const AddGateCodeModal = ({
       setDspSearchQuery('');
       setFilteredDsps(dsps);
 
-      // Jey: Programmatically focus on the first input when the modal opens on web
       if (Platform.OS === 'web' && locationInputRef.current) {
         locationInputRef.current.focus();
       }
@@ -121,10 +115,8 @@ const AddGateCodeModal = ({
 
   const uploadImage = async (uri) => {
     if (!uri) return null;
-
     const response = await fetch(uri);
     const blob = await response.blob();
-
     const filename = `gate_photos/${uuidv4()}.jpg`;
     const imageRef = ref(storage, filename);
     await uploadBytes(imageRef, blob);
@@ -134,23 +126,18 @@ const AddGateCodeModal = ({
 
   const handleSave = async () => {
     setLoading(true);
-
     const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
     const dspToSaveId = isAdmin ? selectedDspId : userDspId;
-
-    // Jey: Step 1: Input Validation
     if (!location || !code) {
       Alert.alert('Missing Information', 'Please enter both Location/Complex Name and Gate Code.');
       setLoading(false);
       return;
     }
-    
     if (isAdmin && !selectedDspId) {
       Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
       setLoading(false);
       return;
     }
-    
     if (!dspToSaveId || !dspToSaveName) {
       Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
       setLoading(false);
@@ -158,7 +145,6 @@ const AddGateCodeModal = ({
     }
 
     let imageUrl = null;
-    // Jey: Step 2: Handle Image Upload Safely
     if (imageUri) {
       try {
         imageUrl = await uploadImage(imageUri);
@@ -166,22 +152,20 @@ const AddGateCodeModal = ({
         console.error("Jey: Image upload failed:", e);
         Alert.alert("Upload Error", "Failed to upload image. Please check your network and try again.");
         setLoading(false);
-        return; // Stop the function on upload failure
+        return; 
       }
     }
 
     let encryptedCode = null;
-    // Jey: Step 3: Handle Code Encryption Safely
     try {
       encryptedCode = CryptoJS.AES.encrypt(code, ENCRYPTION_KEY).toString();
     } catch (e) {
       console.error("Jey: Encryption failed:", e);
       Alert.alert("Encryption Error", "Failed to encrypt gate code. Please ensure the key is correct and the `react-native-get-random-values` library is installed.");
       setLoading(false);
-      return; // Stop the function on encryption failure
+      return; 
     }
 
-    // Jey: Step 4: Save to Firestore Safely
     try {
       await addDoc(collection(db, 'gateCodes'), {
         location: location,
@@ -207,7 +191,7 @@ const AddGateCodeModal = ({
     setSelectedDspId(dsp.id);
     setSelectedDspName(dsp.name);
     setIsDspPickerVisible(false);
-    Keyboard.dismiss(); // Jey: Still good practice for mobile
+    Keyboard.dismiss();
   };
 
   const renderDspItem = ({ item }) => (
@@ -231,91 +215,91 @@ const AddGateCodeModal = ({
       visible={visible}
       onRequestClose={handleClose}
     >
-      {/* Jey: Use 'Pressable' or simple 'View' on web to handle clicks outside the modal
-          'TouchableWithoutFeedback' is primarily for mobile gestures. */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      {/* Jey: This is the key change. Wrap the entire modal view with the touchable. */}
+      <TouchableWithoutFeedback onPress={handleClose}>
         <View style={styles.centeredView}>
-          <ScrollView contentContainerStyle={styles.modalView}>
-            <Text style={styles.modalTitle}>Add New Gate Code</Text>
-
-            {isAdmin ? (
-              <View style={styles.dspSelectionContainer}>
-                <Text style={styles.dspSelectionLabel}>Assign to DSP:</Text>
-                <TouchableOpacity
-                  style={styles.dspSelectButton}
-                  onPress={() => setIsDspPickerVisible(true)}
-                >
-                  <Text style={styles.dspSelectButtonText}>
-                    {selectedDspName || 'Select a DSP'}
-                  </Text>
-                  <Ionicons name="chevron-down" size={20} color="#333" />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.assignedDspTextContainer}>
-                <Text style={styles.assignedDspLabel}>Assigned to:</Text>
-                <Text style={styles.assignedDspName}>{currentDspName}</Text>
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.selectedImage} />
+          {/* Jey: Add an inner touchable with an empty onPress to prevent closing when clicking inside the modal content. */}
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <ScrollView contentContainerStyle={styles.modalView}>
+              <Text style={styles.modalTitle}>Add New Gate Code</Text>
+              
+              {isAdmin ? (
+                <View style={styles.dspSelectionContainer}>
+                  <Text style={styles.dspSelectionLabel}>Assign to DSP:</Text>
+                  <TouchableOpacity
+                    style={styles.dspSelectButton}
+                    onPress={() => setIsDspPickerVisible(true)}
+                  >
+                    <Text style={styles.dspSelectButtonText}>
+                      {selectedDspName || 'Select a DSP'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={20} color="#333" />
+                  </TouchableOpacity>
+                </View>
               ) : (
-                <>
-                  <Image source={require('../assets/gate.png')} style={styles.defaultImage} />
-                  <Text style={styles.imagePickerText}>Tap to Add Photo (Optional)</Text>
-                </>
+                <View style={styles.assignedDspTextContainer}>
+                  <Text style={styles.assignedDspLabel}>Assigned to:</Text>
+                  <Text style={styles.assignedDspName}>{currentDspName}</Text>
+                </View>
               )}
-            </TouchableOpacity>
 
-            <TextInput
-              ref={locationInputRef} // Jey: Add ref to the location input
-              style={styles.input}
-              placeholder="Location/Complex Name *"
-              value={location}
-              onChangeText={setLocation}
-              placeholderTextColor="#999"
-              // Jey: For web, enable autoFocus for a better UX
-              autoFocus={Platform.OS === 'web'}
-            />
-            <TextInput
-              ref={codeInputRef} // Jey: Add ref to the code input
-              style={styles.input}
-              placeholder="Gate Code *"
-              value={code}
-              onChangeText={setCode}
-              placeholderTextColor="#999"
-            />
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              placeholder="Notes (Optional)"
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={4}
-              placeholderTextColor="#999"
-              // Jey: On web, we can also manage focus on this input.
-              onFocus={() => { if (Platform.OS === 'web') notesInputRef.current?.focus(); }}
-            />
-
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
+              <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+                {imageUri ? (
+                  <Image source={{ uri: imageUri }} style={styles.selectedImage} />
                 ) : (
-                  <Text style={styles.buttonText}>Save Gate Code</Text>
+                  <>
+                    <Image source={require('../assets/gate.png')} style={styles.defaultImage} />
+                    <Text style={styles.imagePickerText}>Tap to Add Photo (Optional)</Text>
+                  </>
                 )}
               </TouchableOpacity>
-            </View>
-          </ScrollView>
+
+              <TextInput
+                ref={locationInputRef} 
+                style={styles.input}
+                placeholder="Location/Complex Name *"
+                value={location}
+                onChangeText={setLocation}
+                placeholderTextColor="#999"
+                autoFocus={Platform.OS === 'web'}
+              />
+              <TextInput
+                ref={codeInputRef} 
+                style={styles.input}
+                placeholder="Gate Code *"
+                value={code}
+                onChangeText={setCode}
+                placeholderTextColor="#999"
+              />
+              <TextInput
+                ref={notesInputRef}
+                style={[styles.input, styles.notesInput]}
+                placeholder="Notes (Optional)"
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={4}
+                placeholderTextColor="#999"
+              />
+
+              <View style={styles.buttonContainer}>
+                <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
+                  <Text style={styles.buttonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSave}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Save Gate Code</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
 
           <Modal
             animationType="slide"
@@ -334,7 +318,6 @@ const AddGateCodeModal = ({
                       value={dspSearchQuery}
                       onChangeText={setDspSearchQuery}
                       clearButtonMode="while-editing"
-                      // Jey: Add autoFocus for the search input on the web
                       autoFocus={Platform.OS === 'web'}
                     />
                     <FlatList
@@ -381,7 +364,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     width: '90%',
-    maxWidth: Platform.OS === 'web' ? 500 : '90%', // Jey: Add a max-width for better web layout
+    maxWidth: Platform.OS === 'web' ? 500 : '90%',
     maxHeight: '85%',
   },
   modalTitle: {
@@ -453,7 +436,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({ // Jey: Add hover effect for better web UX
+    ...Platform.select({
       web: {
         cursor: 'pointer',
         transition: 'background-color 0.3s ease',
@@ -471,7 +454,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({ // Jey: Add hover effect
+    ...Platform.select({
       web: {
         cursor: 'pointer',
         transition: 'background-color 0.3s ease',
@@ -507,7 +490,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    ...Platform.select({ // Jey: Add hover effect
+    ...Platform.select({
       web: {
         cursor: 'pointer',
         transition: 'background-color 0.3s ease',
@@ -588,7 +571,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    ...Platform.select({ // Jey: Add hover effect
+    ...Platform.select({
       web: {
         cursor: 'pointer',
         ':hover': {
@@ -617,7 +600,7 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     alignItems: 'center',
-    ...Platform.select({ // Jey: Add hover effect
+    ...Platform.select({
       web: {
         cursor: 'pointer',
         transition: 'background-color 0.3s ease',
