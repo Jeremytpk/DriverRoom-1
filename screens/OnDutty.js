@@ -470,6 +470,12 @@ const styles = StyleSheet.create({
     selectAllText: {
         color: '#6BB9F0',
         fontWeight: 'bold',
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                userSelect: 'none', // Prevents text from being selected on click
+            },
+        }),
     },
     countText: {
         marginLeft: 15,
@@ -482,6 +488,15 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         borderRadius: 5,
         alignItems: 'center',
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease-in-out',
+                ':hover': {
+                    backgroundColor: '#e64e2d',
+                },
+            },
+        }),
     },
     offDutyAllButtonText: {
         color: '#fff',
@@ -503,6 +518,15 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 2,
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'transform 0.2s ease-in-out',
+                ':hover': {
+                    transform: 'translateY(-2px)',
+                },
+            },
+        }),
     },
     selectedCardForRescue: {
         backgroundColor: '#e0f2f7',
@@ -549,6 +573,15 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease-in-out',
+                ':hover': {
+                    backgroundColor: '#e64e2d',
+                },
+            },
+        }),
     },
     emptyContainer: {
         flex: 1,
@@ -591,6 +624,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease-in-out',
+                ':hover': {
+                    backgroundColor: '#5ca3e0',
+                },
+            },
+        }),
     },
     rescueButtonText: {
         marginLeft: 10,
@@ -606,6 +648,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease-in-out',
+                ':hover': {
+                    backgroundColor: '#e68a91',
+                },
+            },
+        }),
     },
     viewReturnsButton: {
         backgroundColor: '#6BB9F0',
@@ -616,19 +667,35 @@ const styles = StyleSheet.create({
         marginRight: 10,
         paddingLeft: 5,
         paddingTop: 4,
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease-in-out',
+                ':hover': {
+                    backgroundColor: '#5ca3e0',
+                },
+            },
+        }),
     },
-    // Jey: New style for the rescue indicator dot
     rescueIndicator: {
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: '#007bff', // A distinct blue color
+        backgroundColor: '#007bff', 
         marginLeft: 8,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.3,
         shadowRadius: 1,
         elevation: 2,
+    },
+    checkboxContainer: {
+        marginRight: 10,
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+            },
+        }),
     },
 });
 
