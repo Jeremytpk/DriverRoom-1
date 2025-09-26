@@ -37,7 +37,7 @@ const GateCodes = () => {
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
   
-  // Jey: Flags defined but NOT used for deletion logic visibility/execution anymore.
+  // Jey: Flags defined
   const isAdmin = userData?.role === 'admin';
   const isDsp = userData?.role === 'company'; 
 
@@ -158,7 +158,6 @@ const GateCodes = () => {
 
   const deleteGateCode = async (codeId) => {
     // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
-    // The user will see the alert and attempt to delete regardless of their role.
     
     Alert.alert(
       "Delete Gate Code",
@@ -210,7 +209,7 @@ const GateCodes = () => {
       </View>
       
       <View style={styles.cardActions}>
-        {/* Jey: REMOVED VISIBILITY CONDITION - BUTTON IS ALWAYS RENDERED */}
+        {/* Jey: Delete button is now always rendered */}
         <TouchableOpacity
           style={styles.deleteIconContainer}
           onPress={() => deleteGateCode(item.id)} 
@@ -226,7 +225,7 @@ const GateCodes = () => {
 
   if (loading || isDSPsLoading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
+      <View style={[styles.mainContainer, styles.loadingContainer]}>
         <ActivityIndicator size="large" color="#6BB9F0" />
         <Text style={styles.loadingText}>Loading gate codes...</Text>
       </View>
@@ -234,36 +233,41 @@ const GateCodes = () => {
   }
   
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <TextInput
-          style={styles.searchBar}
-          placeholder="Search by address, notes, or DSP..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-          autoCapitalize="none"
-        />
-
-        {filteredGateCodes.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
-            </Text>
-            {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
-            {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
-          </View>
-        ) : (
-          <FlatList
-            data={filteredGateCodes}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
+    // Jey: Main container wrapping the scrollable content and the fixed footer
+    <View style={styles.mainContainer}> 
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.contentWrapper}> {/* This new View holds the scrollable content */}
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search by address, notes, or DSP..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+            autoCapitalize="none"
           />
-        )}
 
-        <AddGateCodeModal
+          {filteredGateCodes.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Text style={styles.emptyStateText}>
+                {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
+              </Text>
+              {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "Add New Code" button below!</Text>}
+              {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
+            </View>
+          ) : (
+            <FlatList
+              data={filteredGateCodes}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              // Jey: No paddingBottom needed here as the footer is separate
+              contentContainerStyle={styles.listContent} 
+            />
+          )}
+        </View>
+      </TouchableWithoutFeedback>
+
+      <AddGateCodeModal
           visible={isAddModalVisible}
           onClose={handleAddModalClose}
           onSave={handleGateCodeSaved}
@@ -272,14 +276,14 @@ const GateCodes = () => {
           userDspId={currentDspId}
           dsps={dsps}
           isAdmin={isAdmin}
-        />
+      />
 
-        <Modal
+      <Modal
           visible={isImageViewerVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={handleImageViewerClose}
-        >
+      >
           <TouchableWithoutFeedback onPress={handleImageViewerClose}>
             <View style={styles.imageViewerBackground}>
               {currentImageUri && (
@@ -291,25 +295,35 @@ const GateCodes = () => {
               )}
             </View>
           </TouchableWithoutFeedback>
-        </Modal>
+      </Modal>
 
+      {/* Jey: NEW Fixed Footer Bar */}
+      <View style={styles.footerBar}>
         <TouchableOpacity
-          style={[styles.fab, !isDataReady && styles.fabDisabled]}
+          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
           onPress={handleAddGateCode}
           disabled={!isDataReady}
         >
-          <Ionicons name="add" size={30} color="#fff" />
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.footerButtonText}>Add New Code</Text>
         </TouchableOpacity>
       </View>
-    </TouchableWithoutFeedback>
+
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  // Jey: Renamed and modified the main container for the new layout
+  mainContainer: {
     flex: 1,
     backgroundColor: '#fff',
-    padding: 20,
+  },
+  // Jey: New View to contain all scrollable elements (search + list)
+  contentWrapper: {
+    flex: 1,
+    paddingHorizontal: 20, // Keep horizontal padding
+    paddingTop: 20,
   },
   title: {
     fontSize: 24,
@@ -336,7 +350,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   listContent: {
-    paddingBottom: 80, 
+    paddingBottom: 20, // Add a bit of space at the bottom above the footer
   },
   codeCard: {
     backgroundColor: '#f8f9fa',
@@ -444,21 +458,35 @@ const styles = StyleSheet.create({
     width: '95%',
     height: '95%',
   },
-  fab: {
-    position: 'absolute',
-    width: 60,
-    height: 60,
-    alignItems: 'center',
+
+  // Jey: NEW STYLES FOR THE FIXED FOOTER BAR
+  footerBar: {
+    flexDirection: 'row',
     justifyContent: 'center',
-    right: 30,
-    bottom: 30,
-    backgroundColor: '#6BB9F0',
-    borderRadius: 30,
-    elevation: 8,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f1f1',
+    elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+
+  // Jey: NEW STYLES FOR THE NORMAL BUTTON
+  footerButton: {
+    flex: 1, 
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    justifyContent: 'center',
+    backgroundColor: '#6BB9F0',
+    padding: 12,
+    borderRadius: 8, 
+    elevation: 3,
     ...Platform.select({ 
       web: {
         cursor: 'pointer',
@@ -469,7 +497,13 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  fabDisabled: {
+  footerButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  footerButtonDisabled: {
     backgroundColor: '#A0C8D6',
     ...Platform.select({ 
       web: {
@@ -480,6 +514,8 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  
+
   deleteIconContainer: {
     padding: 5,
     ...Platform.select({ 
