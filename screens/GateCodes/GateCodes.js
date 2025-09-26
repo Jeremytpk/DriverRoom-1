@@ -41,11 +41,12 @@ const GateCodes = () => {
   // Jey: Flags defined for role checking
   const isAdmin = userData?.role === 'admin';
   const isDsp = userData?.role === 'company'; 
-  const isDriver = userData?.role === 'driver'; // Jey: NEW FLAG for Driver Role
+  const isDriver = userData?.role === 'driver';
+  const isTrainer = userData?.role === 'trainer'; // Jey: NEW FLAG for Trainer Role
 
   useEffect(() => {
     const fetchDspData = async () => {
-      // Jey: Only non-admin/non-driver users might skip this, but we run it to get the full DSP list for the modal if needed
+      // Jey: Only non-admin/non-driver/non-trainer users might skip this, but we run it to get the full DSP list for the modal if needed
       if (!userData?.dspName) {
         setIsDSPsLoading(false);
         return;
@@ -75,7 +76,7 @@ const GateCodes = () => {
   }, [userData?.role, userData?.dspName, isAdmin]);
 
   useEffect(() => {
-    // Jey: If no dspName and not admin, we assume they can't see codes, unless they are a driver not yet assigned (which is handled by isDataReady)
+    // Jey: If no dspName and not admin, we assume they can't see codes, unless they are a driver/trainer not yet assigned
     if (!userData?.dspName && !isAdmin) {
       setLoading(false);
       return;
@@ -88,7 +89,7 @@ const GateCodes = () => {
         orderBy('createdAt', 'desc')
       );
     } else {
-      // Jey: This covers 'company' and 'driver' since both are restricted by dspName
+      // Jey: This covers 'company', 'driver', and 'trainer' since all are restricted by dspName
       gateCodesQuery = query(
         collection(db, 'gateCodes'),
         where('dspName', '==', userData.dspName),
@@ -113,7 +114,8 @@ const GateCodes = () => {
     return () => unsubscribe();
   }, [userData?.dspName, isAdmin]);
 
-  // Jey: UPDATED LOGIC TO INCLUDE DRIVER
+  // Jey: Logic to ensure the 'Add' button is enabled for all permitted roles (Admin, Company, Driver, Trainer) 
+  // after essential data (codes and DSP list) finishes loading.
   useEffect(() => {
     // 1. Logic for DSPs (Company Role) - Requires specific currentDspId
     const isDspDataReady = isDsp && !loading && !isDSPsLoading && currentDspId;
@@ -121,15 +123,18 @@ const GateCodes = () => {
     // 2. Logic for Admins
     const isAdminDataReady = isAdmin && !loading && !isDSPsLoading;
     
-    // 3. Jey: NEW Logic for Drivers - They only need the lists to finish loading
-    const isDriverDataReady = isDriver && !loading && !isDSPsLoading; 
+    // 3. Logic for Drivers
+    const isDriverDataReady = isDriver && !loading && !isDSPsLoading;
+    
+    // 4. Jey: NEW Logic for Trainers
+    const isTrainerDataReady = isTrainer && !loading && !isDSPsLoading; 
 
-    if (isDspDataReady || isAdminDataReady || isDriverDataReady) {
+    if (isDspDataReady || isAdminDataReady || isDriverDataReady || isTrainerDataReady) {
       setIsDataReady(true);
     } else {
       setIsDataReady(false); 
     }
-  }, [loading, isDSPsLoading, currentDspId, isAdmin, isDsp, isDriver]);
+  }, [loading, isDSPsLoading, currentDspId, isAdmin, isDsp, isDriver, isTrainer]);
 
   useEffect(() => {
     if (searchQuery === '') {
@@ -278,7 +283,6 @@ const GateCodes = () => {
               <Text style={styles.emptyStateText}>
                 {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
               </Text>
-              {/* Jey: Updated helper text */}
               {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button in the header!</Text>}
               {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
             </View>
@@ -336,7 +340,7 @@ const styles = StyleSheet.create({
   contentWrapper: {
     flex: 1,
     paddingHorizontal: 20,
-    // Jey: Removed paddingTop: 20 here as it is now in headerBar
+    // Jey: Removed paddingTop from here as it's now in headerBar
     paddingTop: 0, 
   },
   title: {
@@ -348,7 +352,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   
-  // Jey: NEW STYLE for the top bar (replaces the old search bar placement)
+  // Jey: NEW STYLE for the top bar
   headerBar: {
     flexDirection: 'row', // Align children horizontally
     justifyContent: 'space-between', // Push children to opposite ends
@@ -483,8 +487,6 @@ const styles = StyleSheet.create({
     width: '95%',
     height: '95%',
   },
-
-  // Jey: REMOVED footerBar, footerButton, and footerButtonText styles.
 
   // Jey: NEW/MODIFIED STYLES for the Add Button (formerly footerButton)
   addButton: {
