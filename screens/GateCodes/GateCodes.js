@@ -20,6 +20,7 @@ import { collection, query, onSnapshot, orderBy, deleteDoc, doc, where, getDocs 
 import AddGateCodeModal from '../../components/AddGateCodeModal';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { ScrollView } from 'react-native-gesture-handler';
 
 const GateCodes = () => {
   const { userData, user } = useAuth();
@@ -244,7 +245,16 @@ const GateCodes = () => {
   }
   
   return (
+    <ScrollView>
     <View style={styles.mainContainer}> 
+    <TouchableOpacity
+          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
+          onPress={handleAddGateCode}
+          disabled={!isDataReady}
+        >
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.footerButtonText}>Add New Code</Text>
+        </TouchableOpacity>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.contentWrapper}>
           <TextInput
@@ -308,17 +318,11 @@ const GateCodes = () => {
 
       {/* Fixed Footer Bar with the Add Button */}
       <View style={styles.footerBar}>
-        <TouchableOpacity
-          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
-          onPress={handleAddGateCode}
-          disabled={!isDataReady}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.footerButtonText}>Add New Code</Text>
-        </TouchableOpacity>
+        
       </View>
 
     </View>
+    </ScrollView>
   );
 };
 
