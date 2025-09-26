@@ -248,22 +248,38 @@ const GateCodes = () => {
     <View style={styles.mainContainer}> 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.contentWrapper}>
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Search by address, notes, or DSP..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-            autoCapitalize="none"
-          />
+          
+          {/* Jey: NEW HEADER BAR for Search and Add Button */}
+          <View style={styles.headerBar}>
+            
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search by address, notes, or DSP..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+              autoCapitalize="none"
+            />
+            
+            {/* Jey: The Add Button is moved to the right of the header */}
+            <TouchableOpacity
+              style={[styles.addButton, !isDataReady && styles.addButtonDisabled]}
+              onPress={handleAddGateCode}
+              disabled={!isDataReady}
+            >
+              <Ionicons name="add" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          {/* Jey: END NEW HEADER BAR */}
 
           {filteredGateCodes.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <Text style={styles.emptyStateText}>
                 {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
               </Text>
-              {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "Add New Code" button below!</Text>}
+              {/* Jey: Updated helper text */}
+              {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button in the header!</Text>}
               {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
             </View>
           ) : (
@@ -307,18 +323,7 @@ const GateCodes = () => {
           </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Fixed Footer Bar with the Add Button */}
-      <View style={styles.footerBar}>
-        <TouchableOpacity
-          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
-          onPress={handleAddGateCode}
-          disabled={!isDataReady}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.footerButtonText}>Add New Code</Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* Jey: REMOVED the Fixed Footer Bar entirely */}
     </View>
   );
 };
@@ -331,7 +336,8 @@ const styles = StyleSheet.create({
   contentWrapper: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    // Jey: Removed paddingTop: 20 here as it is now in headerBar
+    paddingTop: 0, 
   },
   title: {
     fontSize: 24,
@@ -341,14 +347,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
+  
+  // Jey: NEW STYLE for the top bar (replaces the old search bar placement)
+  headerBar: {
+    flexDirection: 'row', // Align children horizontally
+    justifyContent: 'space-between', // Push children to opposite ends
+    alignItems: 'center',
+    paddingTop: 20, // Add space at the top
+    paddingBottom: 15,
+  },
+  
   searchBar: {
+    flex: 1, // Let the search bar take up most of the space
     height: 45,
     borderColor: '#ddd',
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 15,
     fontSize: 16,
-    marginBottom: 15,
+    marginRight: 10, // Add margin to separate it from the button
     backgroundColor: '#f1f1f1',
     color: '#333',
     shadowColor: '#000',
@@ -467,54 +484,37 @@ const styles = StyleSheet.create({
     height: '95%',
   },
 
-  footerBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f1f1',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
+  // Jey: REMOVED footerBar, footerButton, and footerButtonText styles.
 
-  footerButton: {
-    flex: 1, 
-    flexDirection: 'row',
+  // Jey: NEW/MODIFIED STYLES for the Add Button (formerly footerButton)
+  addButton: {
+    width: 45, // Fixed width/height for a perfect button
+    height: 45,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#6BB9F0',
-    padding: 12,
     borderRadius: 8, 
     elevation: 3,
     ...Platform.select({ 
       web: {
         cursor: 'pointer',
-        transition: 'background-color 0.2s ease',
+        transition: 'background-color 0.2s ease, transform 0.2s ease',
         ':hover': {
           backgroundColor: '#5ca3e0',
+          transform: 'scale(1.05)',
         },
       },
     }),
   },
-  footerButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  footerButtonDisabled: {
+  
+  addButtonDisabled: {
     backgroundColor: '#A0C8D6',
     ...Platform.select({ 
       web: {
         cursor: 'not-allowed',
         ':hover': {
           backgroundColor: '#A0C8D6',
+          transform: 'scale(1)',
         },
       },
     }),
