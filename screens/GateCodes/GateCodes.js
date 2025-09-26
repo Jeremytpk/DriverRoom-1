@@ -37,6 +37,7 @@ const GateCodes = () => {
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
   
+  // Jey: Flags defined but NOT used for deletion logic visibility/execution anymore.
   const isAdmin = userData?.role === 'admin';
   const isDsp = userData?.role === 'company'; 
 
@@ -156,6 +157,8 @@ const GateCodes = () => {
   };
 
   const deleteGateCode = async (codeId) => {
+    // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
+    
     Alert.alert(
       "Delete Gate Code",
       "Are you sure you want to delete this gate code? This action cannot be undone.",
@@ -168,6 +171,7 @@ const GateCodes = () => {
               await deleteDoc(doc(db, 'gateCodes', codeId));
             } catch (error) {
               console.error("Jey: Error deleting gate code:", error);
+              // The error here might be "Permission Denied" if Firebase rules block it.
               Alert.alert("Error", "Failed to delete gate code. Please check permissions.");
             }
           },
@@ -205,6 +209,7 @@ const GateCodes = () => {
       </View>
       
       <View style={styles.cardActions}>
+        {/* Jey: REMOVED VISIBILITY CONDITION - BUTTON IS ALWAYS RENDERED */}
         <TouchableOpacity
           style={styles.deleteIconContainer}
           onPress={() => deleteGateCode(item.id)} 
@@ -216,6 +221,7 @@ const GateCodes = () => {
       </View>
     </TouchableOpacity>
   );
+
 
   if (loading || isDSPsLoading) {
     return (
@@ -270,20 +276,30 @@ const GateCodes = () => {
   );
 
   return (
+    // Outer View uses the main container style
     <View style={styles.container}>
+      
+      {/* Search Bar - Always Fixed at the Top (outside of the main scroll container) */}
       {SearchHeader}
       
+      {/* Jey's Web/Mobile Scroll Logic */}
+      {/* Mobile/Native: Use TWB for keyboard dismissal, and ListContent fills remaining space */}
       {!isWeb ? (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          {/* Inner view required to apply flex: 1 within TWB */}
           <View style={{ flex: 1 }}>
             {ListContent}
           </View>
         </TouchableWithoutFeedback>
       ) : (
+        /* Web Logic: ListContent's internal ScrollView handles scrolling, 
+           creating the fixed header effect above it.
+        */
         <View style={{ flex: 1 }}>
            {ListContent}
         </View>
       )}
+      {/* End of Jey's conditional logic */}
 
       <AddGateCodeModal
         visible={isAddModalVisible}
@@ -356,8 +372,9 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
+  // Jey's new styles for scroll control
   webScrollView: {
-    flex: 1, 
+    flex: 1, // Ensures the ScrollView takes up the remaining vertical space
   },
   mobileScrollView: {
     flex: 1,
@@ -426,6 +443,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontStyle: 'italic',
+    marginBottom: 3,
   },
   dspName: {
     fontSize: 12,
@@ -526,4 +544,5 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 });
+
 export default GateCodes;
