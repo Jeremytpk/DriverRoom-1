@@ -38,11 +38,11 @@ const GateCodes = () => {
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
   
-  // Jey: Flags defined for role checking
+  // Jey: Flags defined for all permitted roles
   const isAdmin = userData?.role === 'admin';
   const isDsp = userData?.role === 'company'; 
   const isDriver = userData?.role === 'driver';
-  const isTrainer = userData?.role === 'trainer'; // Jey: NEW FLAG for Trainer Role
+  const isTrainer = userData?.role === 'trainer';
 
   useEffect(() => {
     const fetchDspData = async () => {
@@ -114,7 +114,7 @@ const GateCodes = () => {
     return () => unsubscribe();
   }, [userData?.dspName, isAdmin]);
 
-  // Jey: Logic to ensure the 'Add' button is enabled for all permitted roles (Admin, Company, Driver, Trainer) 
+  // Jey: Logic to ensure the 'Add' button is enabled for all permitted roles 
   // after essential data (codes and DSP list) finishes loading.
   useEffect(() => {
     // 1. Logic for DSPs (Company Role) - Requires specific currentDspId
@@ -126,7 +126,7 @@ const GateCodes = () => {
     // 3. Logic for Drivers
     const isDriverDataReady = isDriver && !loading && !isDSPsLoading;
     
-    // 4. Jey: NEW Logic for Trainers
+    // 4. Logic for Trainers
     const isTrainerDataReady = isTrainer && !loading && !isDSPsLoading; 
 
     if (isDspDataReady || isAdminDataReady || isDriverDataReady || isTrainerDataReady) {
@@ -254,7 +254,7 @@ const GateCodes = () => {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.contentWrapper}>
           
-          {/* Jey: NEW HEADER BAR for Search and Add Button */}
+          {/* Jey: HEADER BAR with search and add button on the right */}
           <View style={styles.headerBar}>
             
             <TextInput
@@ -267,7 +267,6 @@ const GateCodes = () => {
               autoCapitalize="none"
             />
             
-            {/* Jey: The Add Button is moved to the right of the header */}
             <TouchableOpacity
               style={[styles.addButton, !isDataReady && styles.addButtonDisabled]}
               onPress={handleAddGateCode}
@@ -276,7 +275,7 @@ const GateCodes = () => {
               <Ionicons name="add" size={24} color="#fff" />
             </TouchableOpacity>
           </View>
-          {/* Jey: END NEW HEADER BAR */}
+          {/* Jey: END HEADER BAR */}
 
           {filteredGateCodes.length === 0 ? (
             <View style={styles.emptyStateContainer}>
@@ -338,9 +337,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   contentWrapper: {
-    flex: 1,
+    // Jey: FIX: Removed 'flex: 1' from contentWrapper to allow TextInput focus on web
     paddingHorizontal: 20,
-    // Jey: Removed paddingTop from here as it's now in headerBar
     paddingTop: 0, 
   },
   title: {
@@ -369,7 +367,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 15,
     fontSize: 16,
-    marginRight: 10, // Add margin to separate it from the button
+    marginRight: 10, 
     backgroundColor: '#f1f1f1',
     color: '#333',
     shadowColor: '#000',
@@ -377,6 +375,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    zIndex: 10, // Jey: FIX: Added zIndex to ensure it's on top and clickable on Web
   },
   listContent: {
     paddingBottom: 20,
@@ -488,9 +487,8 @@ const styles = StyleSheet.create({
     height: '95%',
   },
 
-  // Jey: NEW/MODIFIED STYLES for the Add Button (formerly footerButton)
   addButton: {
-    width: 45, // Fixed width/height for a perfect button
+    width: 45, 
     height: 45,
     alignItems: 'center',
     justifyContent: 'center',
