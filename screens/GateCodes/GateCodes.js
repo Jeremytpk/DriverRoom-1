@@ -11,7 +11,8 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   Keyboard,
-  Alert
+  Alert,
+  Platform,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../firebase';
@@ -35,6 +36,10 @@ const GateCodes = () => {
   const [isDSPsLoading, setIsDSPsLoading] = useState(true);
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
+  
+  // Jey: Flags defined but NOT used for deletion logic visibility/execution anymore.
+  const isAdmin = userData?.role === 'admin';
+  const isDsp = userData?.role === 'company'; 
 
   useEffect(() => {
     const fetchDspData = async () => {
@@ -48,7 +53,7 @@ const GateCodes = () => {
       const dspsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDsps(dspsList);
       
-      if (userData.role !== 'admin') {
+      if (!isAdmin) {
         const foundDsp = dspsList.find(dsp => dsp.name === userData.dspName);
         if (foundDsp) {
           setCurrentDspId(foundDsp.id);
@@ -63,16 +68,16 @@ const GateCodes = () => {
     };
 
     fetchDspData();
-  }, [userData?.role, userData?.dspName]);
+  }, [userData?.role, userData?.dspName, isAdmin]);
 
   useEffect(() => {
-    if (!userData?.dspName && userData?.role !== 'admin') {
+    if (!userData?.dspName && !isAdmin) {
       setLoading(false);
       return;
     }
     
     let gateCodesQuery;
-    if (userData.role === 'admin') {
+    if (isAdmin) {
       gateCodesQuery = query(
         collection(db, 'gateCodes'),
         orderBy('createdAt', 'desc')
@@ -100,17 +105,16 @@ const GateCodes = () => {
     });
 
     return () => unsubscribe();
-  }, [userData?.dspName, userData?.role]);
+  }, [userData?.dspName, isAdmin]);
 
   useEffect(() => {
-    const isUserNonAdmin = userData?.role !== 'admin';
-    const isNonAdminDataReady = isUserNonAdmin && !loading && !isDSPsLoading && currentDspId;
-    const isAdminDataReady = userData?.role === 'admin' && !loading && !isDSPsLoading;
+    const isNonAdminDataReady = isDsp && !loading && !isDSPsLoading && currentDspId;
+    const isAdminDataReady = isAdmin && !loading && !isDSPsLoading;
 
     if (isNonAdminDataReady || isAdminDataReady) {
       setIsDataReady(true);
     }
-  }, [loading, isDSPsLoading, currentDspId, userData?.role]);
+  }, [loading, isDSPsLoading, currentDspId, isAdmin, isDsp]);
 
   useEffect(() => {
     if (searchQuery === '') {
@@ -152,12 +156,10 @@ const GateCodes = () => {
     setCurrentImageUri(null);
   };
 
-  const deleteGateCode = async (codeId, addedByUserId) => {
-    if (user?.uid !== addedByUserId && userData?.role !== 'admin' && userData?.role !== 'company') {
-      Alert.alert("Permission Denied", "You can only delete gate codes you've added, or if you are an admin or company manager.");
-      return;
-    }
-
+  const deleteGateCode = async (codeId) => {
+    // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
+    // The user will see the alert and attempt to delete regardless of their role.
+    
     Alert.alert(
       "Delete Gate Code",
       "Are you sure you want to delete this gate code? This action cannot be undone.",
@@ -170,7 +172,8 @@ const GateCodes = () => {
               await deleteDoc(doc(db, 'gateCodes', codeId));
             } catch (error) {
               console.error("Jey: Error deleting gate code:", error);
-              Alert.alert("Error", "Failed to delete gate code. Please try again.");
+              // The error here might be "Permission Denied" if Firebase rules block it.
+              Alert.alert("Error", "Failed to delete gate code. Please check permissions.");
             }
           },
           style: "destructive"
@@ -184,6 +187,43 @@ const GateCodes = () => {
     navigation.navigate('GateCodeDetail', { gateCodeId });
   };
   
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.codeCard}
+      onPress={() => handleViewDetails(item.id)}
+    >
+      <TouchableOpacity
+        style={styles.cardImageContainer}
+        onPress={() => item.imageUrl && handleImageClick(item.imageUrl)}
+        disabled={!item.imageUrl}
+      >
+        <Image
+          source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/gate.png')}
+          style={styles.cardImage}
+        />
+      </TouchableOpacity>
+      
+      <View style={styles.cardContent}>
+        <Text style={styles.location}>{item.location}</Text>
+        <Text style={styles.code}>Status: Encrypted</Text> 
+        {item.dspName && <Text style={styles.dspName}>Added by: {item.dspName}</Text>}
+      </View>
+      
+      <View style={styles.cardActions}>
+        {/* Jey: REMOVED VISIBILITY CONDITION - BUTTON IS ALWAYS RENDERED */}
+        <TouchableOpacity
+          style={styles.deleteIconContainer}
+          onPress={() => deleteGateCode(item.id)} 
+        >
+          <Ionicons name="trash-outline" size={24} color="#DC3545" />
+        </TouchableOpacity>
+        
+        <Ionicons name="chevron-forward" size={24} color="#666" />
+      </View>
+    </TouchableOpacity>
+  );
+
+
   if (loading || isDSPsLoading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -218,37 +258,7 @@ const GateCodes = () => {
           <FlatList
             data={filteredGateCodes}
             keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.codeCard}
-                onPress={() => handleViewDetails(item.id)}
-              >
-                <View style={styles.cardImageContainer}>
-                  <Image
-                    source={item.imageUrl ? { uri: item.imageUrl } : require('../../assets/gate.png')}
-                    style={styles.cardImage}
-                  />
-                </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.location}>{item.location}</Text>
-                  {/* Jey: The list shows status, not the actual code */}
-                  <Text style={styles.code}>Status: Encrypted</Text> 
-                  {item.notes && <Text style={styles.notes}>Notes: {item.notes}</Text>}
-                  {item.dspName && <Text style={styles.dspName}>Added by: {item.dspName}</Text>}
-                </View>
-                <View style={styles.cardActions}>
-                  <Ionicons name="chevron-forward" size={24} color="#666" />
-                </View>
-                {(user?.uid === item.addedBy || userData?.role === 'admin' || userData?.role === 'company') && (
-                  <TouchableOpacity
-                    style={styles.deleteIconContainer}
-                    onPress={() => deleteGateCode(item.id, item.addedBy)}
-                  >
-                    <Ionicons name="trash-outline" size={24} color="#DC3545" />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            )}
+            renderItem={renderItem}
             contentContainerStyle={styles.listContent}
           />
         )}
@@ -261,7 +271,7 @@ const GateCodes = () => {
           currentUserId={user?.uid}
           userDspId={currentDspId}
           dsps={dsps}
-          isAdmin={userData?.role === 'admin'}
+          isAdmin={isAdmin}
         />
 
         <Modal
@@ -326,7 +336,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 80, 
   },
   codeCard: {
     backgroundColor: '#f8f9fa',
@@ -341,6 +351,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    ...Platform.select({ 
+      web: {
+        cursor: 'pointer',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        ':hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
+        },
+      },
+    }),
   },
   cardImageContainer: {
     width: 80,
@@ -348,6 +368,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     marginRight: 15,
+    ...Platform.select({ 
+      web: {
+        cursor: 'zoom-in',
+      },
+    }),
   },
   cardImage: {
     width: '100%',
@@ -394,6 +419,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    height: 300, 
   },
   emptyStateText: {
     fontSize: 20,
@@ -433,24 +459,44 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
+    ...Platform.select({ 
+      web: {
+        cursor: 'pointer',
+        transition: 'background-color 0.2s ease',
+        ':hover': {
+          backgroundColor: '#5ca3e0',
+        },
+      },
+    }),
   },
   fabDisabled: {
     backgroundColor: '#A0C8D6',
-  },
-  fabIcon: {
-    fontSize: 30,
-    color: '#fff',
+    ...Platform.select({ 
+      web: {
+        cursor: 'not-allowed',
+        ':hover': {
+          backgroundColor: '#A0C8D6',
+        },
+      },
+    }),
   },
   deleteIconContainer: {
-    position: 'absolute',
-    right: 5,
-    top: 5,
     padding: 5,
+    ...Platform.select({ 
+      web: {
+        cursor: 'pointer',
+        transition: 'transform 0.2s ease',
+        ':hover': {
+          transform: 'scale(1.1)',
+        },
+      },
+    }),
   },
   cardActions: {
-    marginLeft: 'auto',
+    marginLeft: 15,
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
 });
 

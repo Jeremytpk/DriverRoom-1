@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Platform, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
         ...Platform.select({
             web: {
                 cursor: 'pointer',
-                userSelect: 'none', // Prevents text from being selected on click
+                userSelect: 'none', 
             },
         }),
     },
