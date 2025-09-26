@@ -265,6 +265,9 @@ const GateCodes = () => {
               onChangeText={setSearchQuery}
               clearButtonMode="while-editing"
               autoCapitalize="none"
+              // Jey: FIX: This line ensures the TextInput captures the click event on web/desktop,
+              // allowing immediate focus and typing without holding the press.
+              onStartShouldSetResponder={() => true} 
             />
             
             <TouchableOpacity
