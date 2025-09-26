@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Image,
@@ -13,6 +12,7 @@ import {
   Keyboard,
   Alert,
   Platform,
+  ScrollView, 
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../firebase';
@@ -158,7 +158,6 @@ const GateCodes = () => {
 
   const deleteGateCode = async (codeId) => {
     // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
-    // The user will see the alert and attempt to delete regardless of their role.
     
     Alert.alert(
       "Delete Gate Code",
@@ -234,74 +233,126 @@ const GateCodes = () => {
   }
   
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        <TextInput
-          style={styles.searchBar}
-          placeholder="Search by address, notes, or DSP..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          clearButtonMode="while-editing"
-          autoCapitalize="none"
-        />
+    // Outer View uses the main container style
+    <View style={styles.container}>
+      
+      {/* Jey's Fix: Conditional rendering to remove TouchableWithoutFeedback on Web */}
+      {Platform.OS !== 'web' ? (
+        // Mobile/Native Logic: Use TWB for keyboard dismissal
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          {/* Inner view required to apply flex: 1 within TWB */}
+          <View style={{ flex: 1 }}>
+            
+            <TextInput
+              style={styles.searchBar}
+              placeholder="Search by address, notes, or DSP..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+              autoCapitalize="none"
+            />
 
-        {filteredGateCodes.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <Text style={styles.emptyStateText}>
-              {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
-            </Text>
-            {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
-            {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
+            {filteredGateCodes.length === 0 ? (
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateText}>
+                  {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
+                </Text>
+                {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
+                {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
+              </View>
+            ) : (
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {filteredGateCodes.map(item => (
+                    <View key={item.id}>
+                        {renderItem({ item })}
+                    </View>
+                ))}
+              </ScrollView>
+            )}
+
           </View>
-        ) : (
-          <FlatList
-            data={filteredGateCodes}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
+        </TouchableWithoutFeedback>
+      ) : (
+        // Web Logic: Render content directly (no TWB wrapper)
+        <>
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search by address, notes, or DSP..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+            autoCapitalize="none"
           />
-        )}
 
-        <AddGateCodeModal
-          visible={isAddModalVisible}
-          onClose={handleAddModalClose}
-          onSave={handleGateCodeSaved}
-          currentDspName={userData?.dspName}
-          currentUserId={user?.uid}
-          userDspId={currentDspId}
-          dsps={dsps}
-          isAdmin={isAdmin}
-        />
-
-        <Modal
-          visible={isImageViewerVisible}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={handleImageViewerClose}
-        >
-          <TouchableWithoutFeedback onPress={handleImageViewerClose}>
-            <View style={styles.imageViewerBackground}>
-              {currentImageUri && (
-                <Image
-                  source={typeof currentImageUri === 'string' ? { uri: currentImageUri } : currentImageUri}
-                  style={styles.fullScreenImage}
-                  resizeMode="contain"
-                />
-              )}
+          {filteredGateCodes.length === 0 ? (
+            <View style={styles.emptyStateContainer}>
+              <Text style={styles.emptyStateText}>
+                {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
+              </Text>
+              {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
+              {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
             </View>
-          </TouchableWithoutFeedback>
-        </Modal>
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {filteredGateCodes.map(item => (
+                  <View key={item.id}>
+                      {renderItem({ item })}
+                  </View>
+              ))}
+            </ScrollView>
+          )}
+        </>
+      )}
+      {/* End of Jey's conditional logic */}
 
-        <TouchableOpacity
-          style={[styles.fab, !isDataReady && styles.fabDisabled]}
-          onPress={handleAddGateCode}
-          disabled={!isDataReady}
-        >
-          <Ionicons name="add" size={30} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </TouchableWithoutFeedback>
+      <AddGateCodeModal
+        visible={isAddModalVisible}
+        onClose={handleAddModalClose}
+        onSave={handleGateCodeSaved}
+        currentDspName={userData?.dspName}
+        currentUserId={user?.uid}
+        userDspId={currentDspId}
+        dsps={dsps}
+        isAdmin={isAdmin}
+      />
+
+      <Modal
+        visible={isImageViewerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleImageViewerClose}
+      >
+        <TouchableWithoutFeedback onPress={handleImageViewerClose}>
+          <View style={styles.imageViewerBackground}>
+            {currentImageUri && (
+              <Image
+                source={typeof currentImageUri === 'string' ? { uri: currentImageUri } : currentImageUri}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <TouchableOpacity
+        style={[styles.fab, !isDataReady && styles.fabDisabled]}
+        onPress={handleAddGateCode}
+        disabled={!isDataReady}
+      >
+        <Ionicons name="add" size={30} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 };
 
@@ -337,6 +388,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 80, 
+    flexGrow: 1, 
   },
   codeCard: {
     backgroundColor: '#f8f9fa',
