@@ -232,86 +232,72 @@ const GateCodes = () => {
     );
   }
   
+  // Jey's Refactor: Platform-aware fixed header logic starts here
+  const isWeb = Platform.OS === 'web';
+  
+  // Content that is always at the top (Search Bar)
+  const SearchHeader = (
+    <TextInput
+      style={styles.searchBar}
+      placeholder="Search by address, notes, or DSP..."
+      placeholderTextColor="#999"
+      value={searchQuery}
+      onChangeText={setSearchQuery}
+      clearButtonMode="while-editing"
+      autoCapitalize="none"
+    />
+  );
+  
+  // Content that scrolls (Gate Codes List or Empty State)
+  const ListContent = (
+    <>
+      {filteredGateCodes.length === 0 ? (
+        <View style={styles.emptyStateContainer}>
+          <Text style={styles.emptyStateText}>
+            {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
+          </Text>
+          {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
+          {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
+        </View>
+      ) : (
+        <ScrollView
+          style={isWeb ? styles.webScrollView : styles.mobileScrollView} 
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {filteredGateCodes.map(item => (
+              <View key={item.id}> 
+                  {renderItem({ item })}
+              </View>
+          ))}
+        </ScrollView>
+      )}
+    </>
+  );
+
   return (
     // Outer View uses the main container style
     <View style={styles.container}>
       
-      {/* Jey's Fix: Conditional rendering to remove TouchableWithoutFeedback on Web */}
-      {Platform.OS !== 'web' ? (
-        // Mobile/Native Logic: Use TWB for keyboard dismissal
+      {/* Search Bar - Always Fixed at the Top (outside of the main scroll container) */}
+      {SearchHeader}
+      
+      {/* Jey's Web/Mobile Scroll Logic */}
+      {/* Mobile/Native: Use TWB for keyboard dismissal, and ListContent fills remaining space */}
+      {!isWeb ? (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           {/* Inner view required to apply flex: 1 within TWB */}
           <View style={{ flex: 1 }}>
-            
-            <TextInput
-              style={styles.searchBar}
-              placeholder="Search by address, notes, or DSP..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              clearButtonMode="while-editing"
-              autoCapitalize="none"
-            />
-
-            {filteredGateCodes.length === 0 ? (
-              <View style={styles.emptyStateContainer}>
-                <Text style={styles.emptyStateText}>
-                  {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
-                </Text>
-                {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
-                {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
-              </View>
-            ) : (
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={styles.listContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                {filteredGateCodes.map(item => (
-                    <View key={item.id}>
-                        {renderItem({ item })}
-                    </View>
-                ))}
-              </ScrollView>
-            )}
-
+            {ListContent}
           </View>
         </TouchableWithoutFeedback>
       ) : (
-        // Web Logic: Render content directly (no TWB wrapper)
-        <>
-          <TextInput
-            style={styles.searchBar}
-            placeholder="Search by address, notes, or DSP..."
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-            autoCapitalize="none"
-          />
-
-          {filteredGateCodes.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
-              <Text style={styles.emptyStateText}>
-                {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
-              </Text>
-              {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
-              {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
-            </View>
-          ) : (
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {filteredGateCodes.map(item => (
-                  <View key={item.id}>
-                      {renderItem({ item })}
-                  </View>
-              ))}
-            </ScrollView>
-          )}
-        </>
+        /* Web Logic: ListContent's internal ScrollView handles scrolling, 
+           creating the fixed header effect above it.
+        */
+        <View style={{ flex: 1 }}>
+           {ListContent}
+        </View>
       )}
       {/* End of Jey's conditional logic */}
 
@@ -385,6 +371,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+  },
+  // Jey's new styles for scroll control
+  webScrollView: {
+    flex: 1, // Ensures the ScrollView takes up the remaining vertical space
+  },
+  mobileScrollView: {
+    flex: 1,
   },
   listContent: {
     paddingBottom: 80, 
