@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Image,
@@ -12,7 +13,6 @@ import {
   Keyboard,
   Alert,
   Platform,
-  ScrollView, 
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../firebase';
@@ -158,6 +158,7 @@ const GateCodes = () => {
 
   const deleteGateCode = async (codeId) => {
     // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
+    // The user will see the alert and attempt to delete regardless of their role.
     
     Alert.alert(
       "Delete Gate Code",
@@ -232,113 +233,75 @@ const GateCodes = () => {
     );
   }
   
-  // Jey's Refactor: Platform-aware fixed header logic starts here
-  const isWeb = Platform.OS === 'web';
-  
-  // Content that is always at the top (Search Bar)
-  const SearchHeader = (
-    <TextInput
-      style={styles.searchBar}
-      placeholder="Search by address, notes, or DSP..."
-      placeholderTextColor="#999"
-      value={searchQuery}
-      onChangeText={setSearchQuery}
-      clearButtonMode="while-editing"
-      autoCapitalize="none"
-    />
-  );
-  
-  // Content that scrolls (Gate Codes List or Empty State)
-  const ListContent = (
-    <>
-      {filteredGateCodes.length === 0 ? (
-        <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateText}>
-            {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
-          </Text>
-          {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
-          {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
-        </View>
-      ) : (
-        <ScrollView
-          style={isWeb ? styles.webScrollView : styles.mobileScrollView} 
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {filteredGateCodes.map(item => (
-              <View key={item.id}> 
-                  {renderItem({ item })}
-              </View>
-          ))}
-        </ScrollView>
-      )}
-    </>
-  );
-
   return (
-    // Outer View uses the main container style
-    <View style={styles.container}>
-      
-      {/* Search Bar - Always Fixed at the Top (outside of the main scroll container) */}
-      {SearchHeader}
-      
-      {/* Jey's Web/Mobile Scroll Logic */}
-      {/* Mobile/Native: Use TWB for keyboard dismissal, and ListContent fills remaining space */}
-      {!isWeb ? (
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          {/* Inner view required to apply flex: 1 within TWB */}
-          <View style={{ flex: 1 }}>
-            {ListContent}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        <TextInput
+          style={styles.searchBar}
+          placeholder="Search by address, notes, or DSP..."
+          placeholderTextColor="#999"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
+          autoCapitalize="none"
+        />
+
+        {filteredGateCodes.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <Text style={styles.emptyStateText}>
+              {searchQuery ? 'No matching gate codes found.' : 'No gate codes found for your DSP.'}
+            </Text>
+            {!searchQuery && <Text style={styles.emptyStateSubText}>Tap the "+" button to add the first code!</Text>}
+            {searchQuery && <Text style={styles.emptyStateSubText}>Try a different search term or add a new gate code.</Text>}
           </View>
-        </TouchableWithoutFeedback>
-      ) : (
-        /* Web Logic: ListContent's internal ScrollView handles scrolling, 
-           creating the fixed header effect above it.
-        */
-        <View style={{ flex: 1 }}>
-           {ListContent}
-        </View>
-      )}
-      {/* End of Jey's conditional logic */}
+        ) : (
+          <FlatList
+            data={filteredGateCodes}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
 
-      <AddGateCodeModal
-        visible={isAddModalVisible}
-        onClose={handleAddModalClose}
-        onSave={handleGateCodeSaved}
-        currentDspName={userData?.dspName}
-        currentUserId={user?.uid}
-        userDspId={currentDspId}
-        dsps={dsps}
-        isAdmin={isAdmin}
-      />
+        <AddGateCodeModal
+          visible={isAddModalVisible}
+          onClose={handleAddModalClose}
+          onSave={handleGateCodeSaved}
+          currentDspName={userData?.dspName}
+          currentUserId={user?.uid}
+          userDspId={currentDspId}
+          dsps={dsps}
+          isAdmin={isAdmin}
+        />
 
-      <Modal
-        visible={isImageViewerVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleImageViewerClose}
-      >
-        <TouchableWithoutFeedback onPress={handleImageViewerClose}>
-          <View style={styles.imageViewerBackground}>
-            {currentImageUri && (
-              <Image
-                source={typeof currentImageUri === 'string' ? { uri: currentImageUri } : currentImageUri}
-                style={styles.fullScreenImage}
-                resizeMode="contain"
-              />
-            )}
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+        <Modal
+          visible={isImageViewerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleImageViewerClose}
+        >
+          <TouchableWithoutFeedback onPress={handleImageViewerClose}>
+            <View style={styles.imageViewerBackground}>
+              {currentImageUri && (
+                <Image
+                  source={typeof currentImageUri === 'string' ? { uri: currentImageUri } : currentImageUri}
+                  style={styles.fullScreenImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
 
-      <TouchableOpacity
-        style={[styles.fab, !isDataReady && styles.fabDisabled]}
-        onPress={handleAddGateCode}
-        disabled={!isDataReady}
-      >
-        <Ionicons name="add" size={30} color="#fff" />
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={[styles.fab, !isDataReady && styles.fabDisabled]}
+          onPress={handleAddGateCode}
+          disabled={!isDataReady}
+        >
+          <Ionicons name="add" size={30} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -372,16 +335,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  // Jey's new styles for scroll control
-  webScrollView: {
-    flex: 1, // Ensures the ScrollView takes up the remaining vertical space
-  },
-  mobileScrollView: {
-    flex: 1,
-  },
   listContent: {
     paddingBottom: 80, 
-    flexGrow: 1, 
   },
   codeCard: {
     backgroundColor: '#f8f9fa',
