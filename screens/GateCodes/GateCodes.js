@@ -37,12 +37,14 @@ const GateCodes = () => {
   const [currentDspId, setCurrentDspId] = useState(null);
   const [isDataReady, setIsDataReady] = useState(false);
   
-  // Jey: Flags defined
+  // Jey: Flags defined for role checking
   const isAdmin = userData?.role === 'admin';
   const isDsp = userData?.role === 'company'; 
+  const isDriver = userData?.role === 'driver'; // Jey: NEW FLAG for Driver Role
 
   useEffect(() => {
     const fetchDspData = async () => {
+      // Jey: Only non-admin/non-driver users might skip this, but we run it to get the full DSP list for the modal if needed
       if (!userData?.dspName) {
         setIsDSPsLoading(false);
         return;
@@ -53,6 +55,7 @@ const GateCodes = () => {
       const dspsList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDsps(dspsList);
       
+      // Jey: Only non-admin needs their specific DSP ID found here (mainly the 'company' role)
       if (!isAdmin) {
         const foundDsp = dspsList.find(dsp => dsp.name === userData.dspName);
         if (foundDsp) {
@@ -71,6 +74,7 @@ const GateCodes = () => {
   }, [userData?.role, userData?.dspName, isAdmin]);
 
   useEffect(() => {
+    // Jey: If no dspName and not admin, we assume they can't see codes, unless they are a driver not yet assigned (which is handled by isDataReady)
     if (!userData?.dspName && !isAdmin) {
       setLoading(false);
       return;
@@ -83,6 +87,7 @@ const GateCodes = () => {
         orderBy('createdAt', 'desc')
       );
     } else {
+      // Jey: This covers 'company' and 'driver' since both are restricted by dspName
       gateCodesQuery = query(
         collection(db, 'gateCodes'),
         where('dspName', '==', userData.dspName),
@@ -107,14 +112,23 @@ const GateCodes = () => {
     return () => unsubscribe();
   }, [userData?.dspName, isAdmin]);
 
+  // Jey: UPDATED LOGIC TO INCLUDE DRIVER
   useEffect(() => {
-    const isNonAdminDataReady = isDsp && !loading && !isDSPsLoading && currentDspId;
+    // 1. Logic for DSPs (Company Role) - Requires specific currentDspId
+    const isDspDataReady = isDsp && !loading && !isDSPsLoading && currentDspId;
+    
+    // 2. Logic for Admins
     const isAdminDataReady = isAdmin && !loading && !isDSPsLoading;
+    
+    // 3. Jey: NEW Logic for Drivers - They only need the lists to finish loading
+    const isDriverDataReady = isDriver && !loading && !isDSPsLoading; 
 
-    if (isNonAdminDataReady || isAdminDataReady) {
+    if (isDspDataReady || isAdminDataReady || isDriverDataReady) {
       setIsDataReady(true);
+    } else {
+      setIsDataReady(false); 
     }
-  }, [loading, isDSPsLoading, currentDspId, isAdmin, isDsp]);
+  }, [loading, isDSPsLoading, currentDspId, isAdmin, isDsp, isDriver]);
 
   useEffect(() => {
     if (searchQuery === '') {
@@ -157,7 +171,6 @@ const GateCodes = () => {
   };
 
   const deleteGateCode = async (codeId) => {
-    // Jey: REMOVED ALL FRONT-END ROLE/PERMISSION CHECKS HERE.
     
     Alert.alert(
       "Delete Gate Code",
@@ -171,7 +184,6 @@ const GateCodes = () => {
               await deleteDoc(doc(db, 'gateCodes', codeId));
             } catch (error) {
               console.error("Jey: Error deleting gate code:", error);
-              // The error here might be "Permission Denied" if Firebase rules block it.
               Alert.alert("Error", "Failed to delete gate code. Please check permissions.");
             }
           },
@@ -209,7 +221,6 @@ const GateCodes = () => {
       </View>
       
       <View style={styles.cardActions}>
-        {/* Jey: Delete button is now always rendered */}
         <TouchableOpacity
           style={styles.deleteIconContainer}
           onPress={() => deleteGateCode(item.id)} 
@@ -233,10 +244,9 @@ const GateCodes = () => {
   }
   
   return (
-    // Jey: Main container wrapping the scrollable content and the fixed footer
     <View style={styles.mainContainer}> 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.contentWrapper}> {/* This new View holds the scrollable content */}
+        <View style={styles.contentWrapper}>
           <TextInput
             style={styles.searchBar}
             placeholder="Search by address, notes, or DSP..."
@@ -260,7 +270,6 @@ const GateCodes = () => {
               data={filteredGateCodes}
               keyExtractor={(item) => item.id}
               renderItem={renderItem}
-              // Jey: No paddingBottom needed here as the footer is separate
               contentContainerStyle={styles.listContent} 
             />
           )}
@@ -297,7 +306,7 @@ const GateCodes = () => {
           </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Jey: NEW Fixed Footer Bar */}
+      {/* Fixed Footer Bar with the Add Button */}
       <View style={styles.footerBar}>
         <TouchableOpacity
           style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
@@ -314,15 +323,13 @@ const GateCodes = () => {
 };
 
 const styles = StyleSheet.create({
-  // Jey: Renamed and modified the main container for the new layout
   mainContainer: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  // Jey: New View to contain all scrollable elements (search + list)
   contentWrapper: {
     flex: 1,
-    paddingHorizontal: 20, // Keep horizontal padding
+    paddingHorizontal: 20,
     paddingTop: 20,
   },
   title: {
@@ -350,7 +357,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   listContent: {
-    paddingBottom: 20, // Add a bit of space at the bottom above the footer
+    paddingBottom: 20,
   },
   codeCard: {
     backgroundColor: '#f8f9fa',
@@ -459,7 +466,6 @@ const styles = StyleSheet.create({
     height: '95%',
   },
 
-  // Jey: NEW STYLES FOR THE FIXED FOOTER BAR
   footerBar: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -476,12 +482,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
 
-  // Jey: NEW STYLES FOR THE NORMAL BUTTON
   footerButton: {
     flex: 1, 
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 15,
     justifyContent: 'center',
     backgroundColor: '#6BB9F0',
     padding: 12,
@@ -515,7 +519,6 @@ const styles = StyleSheet.create({
     }),
   },
   
-
   deleteIconContainer: {
     padding: 5,
     ...Platform.select({ 
