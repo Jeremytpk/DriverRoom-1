@@ -245,16 +245,7 @@ const GateCodes = () => {
   }
   
   return (
-    <ScrollView>
     <View style={styles.mainContainer}> 
-    <TouchableOpacity
-          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
-          onPress={handleAddGateCode}
-          disabled={!isDataReady}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.footerButtonText}>Add New Code</Text>
-        </TouchableOpacity>
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.contentWrapper}>
           <TextInput
@@ -318,11 +309,17 @@ const GateCodes = () => {
 
       {/* Fixed Footer Bar with the Add Button */}
       <View style={styles.footerBar}>
-        
+        <TouchableOpacity
+          style={[styles.footerButton, !isDataReady && styles.footerButtonDisabled]}
+          onPress={handleAddGateCode}
+          disabled={!isDataReady}
+        >
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.footerButtonText}>Add New Code</Text>
+        </TouchableOpacity>
       </View>
 
     </View>
-    </ScrollView>
   );
 };
 
