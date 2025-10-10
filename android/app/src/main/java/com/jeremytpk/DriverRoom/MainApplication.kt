@@ -1,4 +1,4 @@
-package com.driverroom
+package com.jeremytpk.DriverRoom
 
 import android.app.Application
 import android.content.res.Configuration
