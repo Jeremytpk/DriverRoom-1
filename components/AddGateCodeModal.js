@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   ScrollView,
   FlatList,
-  TouchableWithoutFeedback, // Jey: Keep this import
+  TouchableWithoutFeedback, 
   Keyboard
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';

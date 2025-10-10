@@ -14,7 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jeremytpk.DriverRoom"
+      "bundleIdentifier": "com.jeremytpk.DriverRoom",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "googleServicesFile": "./GoogleService-Info.plist" 
     },
     "android": {
       "adaptiveIcon": {
@@ -34,6 +38,18 @@
       "eas": {
         "projectId": "a6f59f54-c725-4958-9559-2ce7a997fb25"
       }
-    }
+    },
+    "plugins": [
+      "@react-native-firebase/app", 
+       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "modularHeaders": true
+          }
+        }
+      ]
+    ]
   }
 }

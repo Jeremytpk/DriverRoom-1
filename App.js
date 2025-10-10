@@ -12,75 +12,40 @@ import { GlobalNoticeProvider, useGlobalNotice } from './context/GlobalNoticeCon
 // Screens
 
 import LoadingScreen from './components/LoadingScreen';
-
 import Login from './screens/Auth/Login';
-
 import Signup from './screens/Auth/Signup';
-
 import PendingApproval from './components/PendingApproval';
-
 import Home from './screens/Home';
-
 import Posts from './screens/Posts/Posts';
-
 import PostDetail from './screens/Posts/PostDetail';
-
 import Settings from './screens/Settings';
-
 import AdminPanel from './screens/AdminScreen';
-
 import CompanyDashboard from './screens/CompanyScreen';
-
 import CreatePost from './screens/Posts/CreatePost';
-
 import GroupChat from './screens/Chat/GroupChat';
-
 import EditProfile from './screens/EditProfile';
-
 import CompanyScreen from './screens/CompanyScreen';
-
 import GroupConversation from './screens/Chat/GroupConversation';
-
 import Notice from './components/Notice';
-
 import SafetyTips from './components/SafetyTips';
-
 import OneConversation from './screens/Chat/OneConversation';
-
 import OneChat from './screens/Chat/OneChat';
-
 import OnDutty from './screens/OnDutty';
-
 import OffDutty from './screens/OffDutty';
-
 import AdminScreen from './screens/AdminScreen';
-
 import ResetPassword from './screens/ResetPassword';
-
 import PasswordResetConfirmation from './screens/PasswordResetConfirmation';
-
 import Team from './screens/Team';
-
 import TeamChat from './screens/TeamChat';
-
 import FeedBack from './screens/FeedBack';
-
 import ManagePosts from './screens/ManagePosts';
-
 import DriverDetailScreen from './screens/DriverDetail';
-
 import CompanyDetailScreen from './screens/CompanyDetail';
-
 import GateCodeDetail from './screens/GateCodes/GateCodeDetail';
-
 import UpgradeModal from './components/UpgradeModal';
-
 import RescueModal from './components/RescueModal';
-
 import ReturnsModal from './components/ReturnsModal';
-
 import ReturnsDetail from './screens/ReturnsDetail';
-
 import GlobalNoticeModal from './components/GlobalNoticeModal';
 
 const Stack = createNativeStackNavigator();
