@@ -48,14 +48,5 @@ target 'DriverRoom' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
-    
-    # Configure Firebase with modular headers
-    installer.pods_project.targets.each do |target|
-      if target.name.start_with?('Firebase') || target.name.start_with?('GoogleUtilities') || target.name.start_with?('RecaptchaInterop')
-        target.build_configurations.each do |config|
-          config.build_settings['DEFINES_MODULE'] = 'YES'
-        end
-      end
-    end
   end
 end
