@@ -1,21 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, Image, ScrollView, RefreshControl, TextInput
+  ActivityIndicator, Alert, Image, ScrollView, RefreshControl, TextInput,
+  SafeAreaView, StatusBar, Platform
 } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons'; 
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient'; 
 import { db } from '../firebase';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { collection, query, getDocs, where, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import CompanyModal from '../components/CompanyModal';
 import AssignDSPModal from '../components/AssignDSPModal';
 import TransferDSPModal from '../components/TransferDSPModal';
+import AnalyticsDashboard from './AnalyticsDashboard';
 
 const AdminScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('companies');
   const [companies, setCompanies] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,6 +40,7 @@ const AdminScreen = ({ navigation }) => {
   
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [showStats, setShowStats] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -41,16 +53,32 @@ const AdminScreen = ({ navigation }) => {
       ] = await Promise.all([
         getDocs(collection(db, 'users')),
         getDocs(collection(db, 'companies')),
-        getDocs(query(collection(db, 'users'), where('role', '==', 'driver')))
+        getDocs(query(collection(db, 'users'), where('role', 'in', ['driver', 'trainer'])))
       ]);
 
       const allUsersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const companiesData = companiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const driversData = driversSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+      setCompanies(companiesSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          if (nameA < nameB) return -1;
+          if (nameA > nameB) return 1;
+          return 0;
+        })
+      );
+      setDrivers(driversSnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .sort((a, b) => {
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          if (nameA < nameB) return -1;
+          if (nameA > nameB) return 1;
+          return 0;
+        })
+      );
       setAllUsers(allUsersData);
-      setCompanies(companiesData);
-      setDrivers(driversData);
 
     } catch (error) {
       console.error("Jey: Error fetching admin data:", error);
@@ -92,6 +120,10 @@ const AdminScreen = ({ navigation }) => {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchData();
+  };
+
+  const toggleStats = () => {
+    setShowStats(!showStats);
   };
 
   const toggleDriverActivation = async (driverId, currentStatus) => {
@@ -226,14 +258,58 @@ const AdminScreen = ({ navigation }) => {
   const getPlanColor = (plan) => {
     switch (plan) {
       case 'Essentials':
-        return '#3498db';
+        return '#4FC3F7';
       case 'Professional':
-        return '#2ecc71';
+        return '#66BB6A';
       case 'Executive':
-        return '#9b59b6';
+        return '#AB47BC';
       default:
-        return '#ccc';
+        return '#90A4AE';
     }
+  };
+
+  const getStatistics = () => {
+    const totalCompanies = companies.length;
+    const totalDrivers = drivers.length;
+    const activeDrivers = drivers.filter(d => d.activated).length;
+    const companiesWithDSP = companies.filter(c => c.dspUserId).length;
+    
+    return {
+      totalCompanies,
+      totalDrivers,
+      activeDrivers,
+      companiesWithDSP,
+      inactiveDrivers: totalDrivers - activeDrivers,
+      companiesWithoutDSP: totalCompanies - companiesWithDSP
+    };
+  };
+
+  const renderStatCard = (title, value, icon, color, subtitle) => (
+    <View style={[styles.statCard, { borderLeftColor: color }]}>
+      <View style={styles.statHeader}>
+        <FontAwesome5 name={icon} size={16} color={color} />
+        <Text style={styles.statTitle}>{title}</Text>
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+    </View>
+  );
+
+  const renderDashboardStats = () => {
+    const stats = getStatistics();
+    
+    return (
+      <View style={styles.statsContainer}>
+        <View style={styles.statsRow}>
+          {renderStatCard("Companies", stats.totalCompanies, "building", "#4FC3F7", `${stats.companiesWithDSP} with DSP`)}
+          {renderStatCard("Total Drivers", stats.totalDrivers, "users", "#FF7043", `${stats.activeDrivers} active`)}
+        </View>
+        <View style={styles.statsRow}>
+          {renderStatCard("Active Drivers", stats.activeDrivers, "user-check", "#66BB6A", `${stats.inactiveDrivers} pending`)}
+          {renderStatCard("DSP Assigned", stats.companiesWithDSP, "user-tie", "#AB47BC", `${stats.companiesWithoutDSP} unassigned`)}
+        </View>
+      </View>
+    );
   };
 
   const renderCompanyItem = ({ item }) => {
@@ -244,108 +320,231 @@ const AdminScreen = ({ navigation }) => {
     const plan = item.plan || 'Essentials';
     const planColor = getPlanColor(plan);
 
-    // Jey: ADDED - Logic to calculate remaining days
+    // Logic to calculate remaining days
     let remainingDaysText = null;
+    let remainingDaysColor = '#666';
     if (item.planExpiresAt) {
       const expirationDate = new Date(item.planExpiresAt);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Compare against the start of today
+      today.setHours(0, 0, 0, 0);
       
       const diffTime = expirationDate.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      if (diffDays > 0) {
+      if (diffDays > 7) {
         remainingDaysText = `${diffDays} days left`;
+        remainingDaysColor = '#66BB6A';
+      } else if (diffDays > 0) {
+        remainingDaysText = `${diffDays} days left`;
+        remainingDaysColor = '#FF7043';
       } else if (diffDays === 0) {
         remainingDaysText = 'Expires today';
+        remainingDaysColor = '#F44336';
       } else {
         remainingDaysText = 'Expired';
+        remainingDaysColor = '#F44336';
       }
     }
 
     return (
-      <TouchableOpacity onPress={() => navigateToCompanyDetail(item.id)} style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <MaterialIcons name="business" size={24} color="#6BB9F0" />
-            <Text style={styles.cardTitle}>{item.name || 'No Name'}</Text>
-          </View>
-          {/* Jey: UPDATED - Wrapped plan info in a container for alignment */}
-          <View style={styles.planContainer}>
-            <View style={[styles.planLabel, { backgroundColor: planColor }]}>
-              <Text style={styles.planLabelText}>{plan}</Text>
+      <TouchableOpacity onPress={() => navigateToCompanyDetail(item.id)} style={styles.professionalCard}>
+        <LinearGradient
+          colors={['#FFFFFF', '#F8F9FA']}
+          style={styles.cardGradient}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.companyIconContainer}>
+                <FontAwesome5 name="building" size={20} color="#2196F3" />
+              </View>
+              <View style={styles.companyTitleContainer}>
+                <Text style={styles.professionalCardTitle}>{item.name || 'No Name'}</Text>
+                <View style={styles.companySubInfo}>
+                  <FontAwesome5 name="calendar-alt" size={12} color="#666" />
+                  <Text style={styles.companyCreatedText}>
+                    Created {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'N/A'}
+                  </Text>
+                </View>
+              </View>
             </View>
-            {/* Jey: ADDED - Display the remaining days text if it exists */}
-            {remainingDaysText && (
-              <Text style={styles.remainingDaysText}>{remainingDaysText}</Text>
-            )}
+            <View style={styles.planContainer}>
+              <View style={[styles.modernPlanBadge, { backgroundColor: planColor }]}>
+                <Text style={styles.planBadgeText}>{plan}</Text>
+              </View>
+              {remainingDaysText && (
+                <Text style={[styles.remainingDaysText, { color: remainingDaysColor }]}>
+                  {remainingDaysText}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
-        <View style={styles.cardRow}>
-          <Text style={styles.cardLabel}>DSP Admin:</Text>
-          <Text style={[styles.cardValue, { fontWeight: isDSPAssigned ? 'bold' : 'normal', color: isDSPAssigned ? '#FF9AA2' : '#666' }]}>
-            {assignedDSP ? assignedDSP.name : 'Not Assigned'}
-          </Text>
-        </View>
-        <View style={styles.cardRow}>
-          <Text style={styles.cardLabel}>Total Drivers:</Text>
-          <Text style={styles.cardValue}>{companyDrivers.length}</Text>
-        </View>
-        <View style={styles.cardRow}>
-          <Text style={styles.cardLabel}>Active:</Text>
-          <Text style={[styles.cardValue, { color: 'green', fontWeight: 'bold' }]}>{activeDriverCount}</Text>
-        </View>
+          
+          <View style={styles.cardMetrics}>
+            <View style={styles.metricItem}>
+              <FontAwesome5 name="user-tie" size={14} color={isDSPAssigned ? '#66BB6A' : '#F44336'} />
+              <Text style={styles.metricLabel}>DSP Admin</Text>
+              <Text style={[styles.metricValue, { color: isDSPAssigned ? '#66BB6A' : '#F44336' }]}>
+                {assignedDSP ? assignedDSP.name : 'Not Assigned'}
+              </Text>
+            </View>
+            
+            <View style={styles.metricItem}>
+              <FontAwesome5 name="users" size={14} color="#2196F3" />
+              <Text style={styles.metricLabel}>Total Drivers</Text>
+              <Text style={styles.metricValue}>{companyDrivers.length}</Text>
+            </View>
+            
+            <View style={styles.metricItem}>
+              <FontAwesome5 name="user-check" size={14} color="#66BB6A" />
+              <Text style={styles.metricLabel}>Active</Text>
+              <Text style={[styles.metricValue, { color: '#66BB6A', fontWeight: '600' }]}>
+                {activeDriverCount}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.cardFooter}>
+            <View style={styles.progressContainer}>
+              <Text style={styles.progressLabel}>Activation Rate</Text>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { width: companyDrivers.length > 0 ? `${(activeDriverCount / companyDrivers.length) * 100}%` : '0%' }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {companyDrivers.length > 0 ? Math.round((activeDriverCount / companyDrivers.length) * 100) : 0}%
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
       </TouchableOpacity>
     );
   };
   
   const renderDriverItem = ({ item }) => (
-    <TouchableOpacity onPress={() => navigation.navigate('DriverDetail', { driverId: item.id })} style={styles.listItem}>
-      <View style={styles.driverInfo}>
-        <MaterialIcons name="person" size={24} color="#6BB9F0" />
-        <View style={styles.driverTextContainer}>
-          <Text style={styles.driverName}>{item.name}</Text>
-          <Text style={styles.dspName}>{item.dspName || 'N/A'}</Text>
+    <TouchableOpacity 
+      onPress={() => navigation.navigate('DriverDetail', { driverId: item.id })} 
+      style={styles.professionalDriverCard}
+    >
+      <LinearGradient
+        colors={['#FFFFFF', '#F8F9FA']}
+        style={styles.driverCardGradient}
+      >
+        <View style={styles.driverCardContent}>
+          <View style={styles.driverInfo}>
+            <View style={[styles.driverAvatar, { backgroundColor: item.activated ? '#E8F5E8' : '#FFF3E0' }]}>
+              <FontAwesome5 
+                name="user" 
+                size={18} 
+                color={item.activated ? '#66BB6A' : '#FF7043'} 
+              />
+            </View>
+            <View style={styles.driverDetails}>
+              <Text style={styles.professionalDriverName}>{item.name}</Text>
+              <View style={styles.driverMetaInfo}>
+                <FontAwesome5 name="building" size={12} color="#666" />
+                <Text style={styles.driverCompany}>{item.dspName || 'No Company'}</Text>
+              </View>
+              {item.email && (
+                <View style={styles.driverMetaInfo}>
+                  <FontAwesome5 name="envelope" size={12} color="#666" />
+                  <Text style={styles.driverEmail}>{item.email}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          
+          <View style={styles.driverActions}>
+            <View style={styles.statusContainer}>
+              <View style={[
+                styles.statusBadge, 
+                { backgroundColor: item.activated ? '#E8F5E8' : '#FFF3E0' }
+              ]}>
+                <FontAwesome5 
+                  name={item.activated ? "check-circle" : "clock"} 
+                  size={12} 
+                  color={item.activated ? '#66BB6A' : '#FF7043'} 
+                />
+                <Text style={[
+                  styles.statusBadgeText, 
+                  { color: item.activated ? '#66BB6A' : '#FF7043' }
+                ]}>
+                  {item.activated ? 'Active' : 'Pending'}
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={[
+                styles.modernToggleButton, 
+                { backgroundColor: item.activated ? '#F44336' : '#2196F3' }
+              ]}
+              onPress={() => toggleDriverActivation(item.id, item.activated)}
+            >
+              <FontAwesome5 
+                name={item.activated ? "user-times" : "user-check"} 
+                size={14} 
+                color="#fff" 
+              />
+              <Text style={styles.modernToggleButtonText}>
+                {item.activated ? 'Deactivate' : 'Activate'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-      <View style={styles.listActions}>
-        <Text style={[styles.statusText, { color: item.activated ? 'green' : 'red' }]}>
-          {item.activated ? 'Active' : 'Pending'}
-        </Text>
-        <TouchableOpacity
-          style={[styles.toggleButton, { backgroundColor: item.activated ? '#FF5733' : '#6BB9F0' }]}
-          onPress={() => toggleDriverActivation(item.id, item.activated)}
-        >
-          <Text style={styles.toggleButtonText}>
-            {item.activated ? 'Deactivate' : 'Activate'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      </LinearGradient>
     </TouchableOpacity>
   );
 
   const renderMoreTab = () => (
-    <ScrollView contentContainerStyle={styles.settingsContent}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+    <ScrollView
+      contentContainerStyle={styles.settingsContent}
+      showsVerticalScrollIndicator={false}
     >
-      <Text style={styles.settingsTitle}>More Options</Text>
-      <TouchableOpacity
-        style={styles.settingsCard}
-        onPress={() => navigation.navigate('Settings')}
-      >
-        <MaterialIcons name="settings" size={24} color="#6BB9F0" />
-        <Text style={styles.settingsCardText}>Settings</Text>
-        <Ionicons name="chevron-forward" size={24} color="#999" />
-      </TouchableOpacity>
-      <View style={styles.settingsCard}>
-        <MaterialIcons name="security" size={24} color="#FF9AA2" />
-        <Text style={styles.settingsCardText}>Manage Safety Tips & Notices</Text>
-        <Ionicons name="chevron-forward" size={24} color="#999" />
+      <Text style={styles.settingsTitle}>Administrative Tools</Text>
+      <View style={styles.settingsSection}>
+        <TouchableOpacity
+          style={styles.modernSettingsCard}
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <View style={styles.settingsIconContainer}>
+            <Ionicons name="settings" size={24} color="#2E8B57" />
+          </View>
+          <View style={styles.settingsTextContainer}>
+            <Text style={styles.settingsCardTitle}>System Settings</Text>
+            <Text style={styles.settingsCardSubtitle}>Configure application preferences</Text>
+          </View>
+        </TouchableOpacity>
       </View>
-      <View style={styles.settingsCard}>
-        <MaterialIcons name="announcement" size={24} color="#6BB9F0" />
-        <Text style={styles.settingsCardText}>Broadcast Global Notice</Text>
-        <Ionicons name="chevron-forward" size={24} color="#999" />
+      <View style={styles.settingsSection}>
+        <TouchableOpacity
+          style={styles.modernSettingsCard}
+          onPress={() => navigation.navigate('AnalyticsDashboard')}
+        >
+          <View style={styles.settingsIconContainer}>
+            <Ionicons name="stats-chart" size={24} color="#2E8B57" />
+          </View>
+          <View style={styles.settingsTextContainer}>
+            <Text style={styles.settingsCardTitle}>Analytics Dashboard</Text>
+            <Text style={styles.settingsCardSubtitle}>View detailed usage statistics</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.settingsSection}>
+        <View style={[styles.modernSettingsCard, { backgroundColor: '#F8FAFB', elevation: 0 }]}
+          pointerEvents="none"
+        >
+          <View style={styles.settingsIconContainer}>
+            <Ionicons name="information-circle" size={24} color="#2E8B57" />
+          </View>
+          <View style={styles.settingsTextContainer}>
+            <Text style={styles.settingsCardTitle}>App Information</Text>
+            <Text style={styles.settingsCardSubtitle}>Version 2.1.0 • Build 2024.10</Text>
+          </View>
+        </View>
       </View>
     </ScrollView>
   );
@@ -363,23 +562,40 @@ const AdminScreen = ({ navigation }) => {
       case 'companies':
         return (
           <View style={styles.tabContentContainer}>
-            <View style={styles.searchAndCountContainer}>
-              <TextInput
-                style={styles.searchBar}
-                placeholder="Search companies..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.countText}>Total: {filteredCompanies.length}</Text>
+            <View style={styles.modernSearchContainer}>
+              <View style={styles.searchInputContainer}>
+                <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.modernSearchBar}
+                  placeholder="Search companies..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor="#999"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                    <FontAwesome5 name="times" size={14} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.countContainer}>
+                <Text style={styles.modernCountText}>
+                  {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+                </Text>
+              </View>
             </View>
 
             <TouchableOpacity
-              style={styles.addCompanyButton}
+              style={styles.modernAddButton}
               onPress={() => handleOpenCompanyModal()}
             >
-              <MaterialIcons name="add" size={24} color="#fff" />
-              <Text style={styles.addCompanyButtonText}>Add New Company</Text>
+              <LinearGradient
+                colors={['#2196F3', '#1976D2']}
+                style={styles.addButtonGradient}
+              >
+                <FontAwesome5 name="plus" size={18} color="#fff" />
+                <Text style={styles.modernAddButtonText}>Add New Company</Text>
+              </LinearGradient>
             </TouchableOpacity>
             <FlatList
               data={filteredCompanies}
@@ -394,15 +610,27 @@ const AdminScreen = ({ navigation }) => {
       case 'drivers':
         return (
           <View style={styles.tabContentContainer}>
-            <View style={styles.searchAndCountContainer}>
-              <TextInput
-                style={styles.searchBar}
-                placeholder="Search drivers or DSPs..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.countText}>Total: {filteredDrivers.length}</Text>
+            <View style={styles.modernSearchContainer}>
+              <View style={styles.searchInputContainer}>
+                <FontAwesome5 name="search" size={16} color="#666" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.modernSearchBar}
+                  placeholder="Search drivers or DSPs..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor="#999"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                    <FontAwesome5 name="times" size={14} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={styles.countContainer}>
+                <Text style={styles.modernCountText}>
+                  {filteredDrivers.length} {filteredDrivers.length === 1 ? 'driver' : 'drivers'}
+                </Text>
+              </View>
             </View>
             <FlatList
               data={filteredDrivers}
@@ -431,54 +659,93 @@ const AdminScreen = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerProfile}>
-          {loggedInUser?.profilePictureUrl ? (
-            <Image source={{ uri: loggedInUser.profilePictureUrl }} style={styles.profileImage} />
-          ) : (
-            <MaterialIcons name="account-circle" size={40} color="#666" />
-          )}
-          <View>
-            <Text style={styles.headerTitle}>Admin Dashboard</Text>
-            <Text style={styles.userNameText}>{loggedInUser?.name || 'Admin User'}</Text>
+    <SafeAreaView style={styles.safeContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#1565C0" />
+      <LinearGradient
+        colors={['#1565C0', '#2196F3', '#42A5F5']}
+        style={styles.headerGradient}
+      >
+        <View style={styles.modernHeader}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerProfile}>
+              <View style={styles.profileImageContainer}>
+                {loggedInUser?.profilePictureUrl ? (
+                  <Image source={{ uri: loggedInUser.profilePictureUrl }} style={styles.modernProfileImage} />
+                ) : (
+                  <View style={styles.defaultProfileContainer}>
+                    <FontAwesome5 name="user-shield" size={24} color="#fff" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.modernHeaderTitle}>Admin Dashboard</Text>
+                <Text style={styles.modernUserName}>{loggedInUser?.name || 'Administrator'}</Text>
+                <Text style={styles.headerDate}>
+                  {new Date().toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.headerActions}>
+              {activeTab === 'companies' && (
+                <TouchableOpacity 
+                  onPress={toggleStats} 
+                  style={styles.modernToggleStatsButton}
+                  activeOpacity={0.7}
+                >
+                  <FontAwesome5 
+                    name={showStats ? "eye-slash" : "eye"} 
+                    size={16} 
+                    color="#fff" 
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={handleRefresh} style={styles.modernRefreshButton}>
+                {refreshing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <FontAwesome5 name="sync-alt" size={18} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
+          
+          {activeTab === 'companies' && showStats && renderDashboardStats()}
         </View>
-        <TouchableOpacity onPress={handleRefresh} style={styles.refreshIconContainer}>
-          {refreshing ? (
-            <ActivityIndicator size="small" color="#6BB9F0" />
-          ) : (
-            <Ionicons name="refresh" size={24} color="#6BB9F0" />
-          )}
-        </TouchableOpacity>
-      </View>
+      </LinearGradient>
 
-      <View style={styles.tabContainer}>
-        {['companies', 'drivers', 'more'].map((tab) => (
+      <View style={styles.modernTabContainer}>
+        {[
+          { key: 'companies', icon: 'building', label: 'Companies' },
+          { key: 'drivers', icon: 'users', label: 'Drivers' },
+          { key: 'more', icon: 'ellipsis-h', label: 'More' }
+        ].map((tab) => (
           <TouchableOpacity
-            key={tab}
-            style={[styles.tabButton, activeTab === tab && styles.activeTab]}
+            key={tab.key}
+            style={[styles.modernTabButton, activeTab === tab.key && styles.modernActiveTab]}
             onPress={() => {
-              setActiveTab(tab);
+              setActiveTab(tab.key);
               setSearchQuery('');
             }}
           >
-            <MaterialIcons
-              name={
-                tab === 'companies' ? 'business' :
-                tab === 'drivers' ? 'people' : 'more-horiz'
-              }
-              size={24}
-              color={activeTab === tab ? '#FF9AA2' : '#666'}
+            <FontAwesome5
+              name={tab.icon}
+              size={18}
+              color={activeTab === tab.key ? '#2196F3' : '#666'}
             />
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            <Text style={[styles.modernTabText, activeTab === tab.key && styles.modernActiveTabText]}>
+              {tab.label}
             </Text>
+            {activeTab === tab.key && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
         ))}
       </View>
 
-      <View style={styles.content}>
+      <View style={styles.modernContent}>
         {renderTabContent()}
       </View>
 
@@ -496,305 +763,564 @@ const AdminScreen = ({ navigation }) => {
         company={selectedCompanyForDSP}
         onAssign={handleAssignDSP}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F5F7FA',
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F5F7FA',
   },
-  header: {
+  headerGradient: {
+    paddingTop: Platform.OS === 'ios' ? 0 : 20,
+  },
+  modernHeader: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 20
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    marginTop: 30,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    alignItems: 'flex-start',
+    marginBottom: 20,
   },
   headerProfile: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  profileImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-    borderColor: '#6BB9F0',
+  profileImageContainer: {
+    marginRight: 15,
+  },
+  modernProfileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  defaultProfileContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
+  headerTextContainer: {
+    flex: 1,
   },
-  userNameText: {
+  modernHeaderTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  modernUserName: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  headerDate: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '400',
   },
-  refreshIconContainer: {
-    padding: 5,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  tabContainer: {
+  modernToggleStatsButton: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 18,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    minWidth: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modernRefreshButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  statsContainer: {
+    marginTop: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginBottom: 15,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 12,
+    padding: 15,
+    marginHorizontal: 5,
+    borderLeftWidth: 4,
+    backdropFilter: 'blur(10px)',
+  },
+  statHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statTitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  statSubtitle: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.7)',
+    fontStyle: 'italic',
+  },
+  modernTabContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#E0E0E0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  tabButton: {
+  modernTabButton: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 15,
+    paddingVertical: 16,
+    position: 'relative',
   },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#FF9AA2',
+  modernActiveTab: {
+    backgroundColor: '#F8F9FA',
   },
-  tabText: {
-    fontSize: 12,
+  modernTabText: {
+    fontSize: 13,
     color: '#666',
-    marginTop: 5,
+    marginTop: 6,
+    fontWeight: '500',
   },
-  activeTabText: {
-    color: '#FF9AA2',
-    fontWeight: 'bold',
+  modernActiveTabText: {
+    color: '#2196F3',
+    fontWeight: '600',
   },
-  content: {
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    width: '80%',
+    height: 3,
+    backgroundColor: '#2196F3',
+    borderRadius: 2,
+  },
+  modernContent: {
     flex: 1,
-    padding: 15,
+    backgroundColor: '#F5F7FA',
   },
   tabContentContainer: {
     flex: 1,
+    padding: 16,
   },
-  searchAndCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  searchBar: {
-    flex: 1,
-    height: 45,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    backgroundColor: '#f1f1f1',
-    color: '#333',
-    marginRight: 10,
-  },
-  countText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
-  },
-  addCompanyButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#6BB9F0',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
-  addCompanyButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  card: {
+  modernSearchContainer: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  modernSearchBar: {
+    flex: 1,
+    height: 45,
+    fontSize: 16,
+    color: '#333',
+  },
+  clearSearchButton: {
+    padding: 5,
+  },
+  countContainer: {
+    alignItems: 'center',
+  },
+  modernCountText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2196F3',
+  },
+  modernAddButton: {
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  addButtonGradient: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  modernAddButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+    marginLeft: 10,
+  },
+  professionalCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cardGradient: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start', // Jey: Changed to flex-start for alignment
-    marginBottom: 10,
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 20,
+    paddingBottom: 16,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  cardTitle: {
+  companyIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  companyTitleContainer: {
+    flex: 1,
+  },
+  professionalCardTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
-    marginLeft: 10,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
   },
-  // Jey: ADDED - New styles for the plan container and remaining days text
+  companySubInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  companyCreatedText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 6,
+  },
   planContainer: {
     alignItems: 'flex-end',
   },
-  planLabel: {
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  modernPlanBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 4,
   },
-  planLabelText: {
+  planBadgeText: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 11,
+    fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   remainingDaysText: {
     fontSize: 11,
-    color: '#666',
-    marginTop: 4,
+    fontWeight: '500',
     fontStyle: 'italic',
   },
-  cardRow: {
+  cardMetrics: {
     flexDirection: 'row',
-    marginBottom: 5,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    justifyContent: 'space-between',
   },
-  cardLabel: {
-    fontWeight: 'bold',
-    width: 100,
-    color: '#666',
-  },
-  cardValue: {
-    flex: 1,
-    color: '#333',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 15,
-  },
-  assignButton: {
-    backgroundColor: '#6BB9F0',
-  },
-  unassignButton: {
-    backgroundColor: '#FF9AA2',
-  },
-  editButton: {
-    backgroundColor: '#FF9AA2',
-  },
-  deleteButton: {
-    backgroundColor: '#FF5733',
-  },
-  actionButton: {
-    flexDirection: 'row',
+  metricItem: {
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 5,
-    marginLeft: 10,
+    flex: 1,
   },
-  actionButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    marginLeft: 5,
+  metricLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    marginBottom: 4,
+    fontWeight: '500',
   },
-  listItem: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 10,
+  metricValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    textAlign: 'center',
+  },
+  cardFooter: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+    paddingTop: 16,
+  },
+  progressContainer: {
+    flex: 1,
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  progressBar: {
+    height: 6,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#66BB6A',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'right',
+    fontWeight: '600',
+  },
+  professionalDriverCard: {
+    borderRadius: 12,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  driverCardGradient: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  driverCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: 16,
   },
   driverInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  driverTextContainer: {
-    marginLeft: 10,
+  driverAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  driverName: {
+  driverDetails: {
+    flex: 1,
+  },
+  professionalDriverName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
   },
-  dspName: {
-    fontSize: 14,
-    color: '#666',
-  },
-  listActions: {
+  driverMetaInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 2,
   },
-  statusText: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    marginRight: 10,
+  driverCompany: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 6,
   },
-  toggleButton: {
-    paddingVertical: 8,
+  driverEmail: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 6,
+  },
+  driverActions: {
+    alignItems: 'flex-end',
+  },
+  statusContainer: {
+    marginBottom: 10,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  modernToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    borderRadius: 5,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
-  toggleButtonText: {
+  modernToggleButtonText: {
     color: '#fff',
-    fontWeight: 'bold',
+    fontWeight: '600',
+    fontSize: 12,
+    marginLeft: 6,
   },
   settingsContent: {
-    padding: 15,
+    padding: 16,
   },
   settingsTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 24,
     textAlign: 'center',
+  },
+  settingsSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modernSettingsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  settingsIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingsTextContainer: {
+    flex: 1,
+  },
+  settingsCardTitle: {
+    fontSize: 16,
+    color: '#1A1A1A',
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  settingsCardSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '400',
   },
   settingsCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 20,
-    marginBottom: 15,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
   },
   settingsCardText: {
     fontSize: 16,
-    color: '#333',
+    color: '#1A1A1A',
     fontWeight: '500',
     flex: 1,
     marginLeft: 15,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 16,
     fontSize: 16,
     color: '#666',
+    fontWeight: '500',
   },
   emptyListText: {
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: 40,
     color: '#999',
     fontSize: 16,
+    fontStyle: 'italic',
   },
   listContentContainer: {
     paddingBottom: 20,

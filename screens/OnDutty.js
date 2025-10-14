@@ -24,17 +24,6 @@ const OnDutty = ({ navigation }) => {
     const [multiSelectMode, setMultiSelectMode] = useState(false);
     const [returnsCache, setReturnsCache] = useState({});
 
-    const autoSwitchToOffDuty = async (userId, userName) => {
-        try {
-            const userRef = doc(db, 'users', userId);
-            await updateDoc(userRef, { isOnDutty: false });
-            console.log(`Jey: User ${userName} automatically switched to off-duty.`);
-        } catch (error) {
-            console.error("Jey: Error auto-switching user status:", error);
-            Alert.alert("Error", "Failed to update user status automatically.");
-        }
-    };
-
     useEffect(() => {
       const returnsQuery = query(collection(db, 'returns'));
       const unsubscribeReturns = onSnapshot(returnsQuery, (snapshot) => {
@@ -54,6 +43,7 @@ const OnDutty = ({ navigation }) => {
       return () => unsubscribeReturns();
     }, []);
 
+
     useEffect(() => {
         if (!userData?.dspName) {
             setLoading(false);
@@ -66,19 +56,43 @@ const OnDutty = ({ navigation }) => {
             where('role', 'in', ['driver', 'trainer']),
             where('isOnDutty', '==', true)
         );
-        
+
         const allDriversQuery = query(
             collection(db, 'users'),
             where('dspName', '==', userData.dspName),
             where('role', 'in', ['driver', 'trainer'])
         );
-        
+
+        const autoSwitchToOffDuty = async (userId, userName) => {
+            try {
+                const userRef = doc(db, 'users', userId);
+                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false, isRTSConfirmed: false });
+                console.log(`Jey: User ${userName} automatically switched to off-duty after 9 hours.`);
+            } catch (error) {
+                console.error("Jey: Error auto-switching user status:", error);
+                // No Alert here, as it runs silently in the background
+            }
+        };
+
         const unsubscribe = onSnapshot(onDutyQuery, (snapshot) => {
             const usersList = snapshot.docs.map(userDoc => ({
                 id: userDoc.id,
                 ...userDoc.data()
             }));
-            
+
+            // Auto off-duty logic: for each on-duty user, set a timer to auto off-duty after 9 hours
+            usersList.forEach(user => {
+                if (user.isOnDutty && user.onDutySince) {
+                    const now = new Date();
+                    // Firebase timestamp conversion logic
+                    const onDutyTime = user.onDutySince.toDate ? user.onDutySince.toDate() : new Date(user.onDutySince);
+                    const diff = now - onDutyTime;
+                    if (diff > 32400000) { // 9 hours in milliseconds
+                        autoSwitchToOffDuty(user.id, user.name);
+                    }
+                }
+            });
+
             const count = usersList.filter(user => user.isCheckedIn).length;
             setCheckedInCount(count);
 
@@ -97,7 +111,7 @@ const OnDutty = ({ navigation }) => {
                 }
                 return a.name.localeCompare(b.name);
             });
-            
+
             setOnDutyUsers(sortedUsers);
             setLoading(false);
         }, (error) => {
@@ -134,7 +148,6 @@ const OnDutty = ({ navigation }) => {
         return () => unsubscribe();
     }, [userData?.uid]);
 
-    // Jey: Updated to reset 'isRescuing' status
     const handleRemoveFromOnDuty = (userId, userName) => {
         Alert.alert(
             "Remove User",
@@ -146,7 +159,7 @@ const OnDutty = ({ navigation }) => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', userId);
-                            await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false });
+                            await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false, isRTSConfirmed: false }); // Reset all duty-related flags
                             Alert.alert("Success", `${userName} has been moved to Off-Duty.`);
                             setSelectedUsers(prev => {
                                 const newSet = new Set(prev);
@@ -165,29 +178,42 @@ const OnDutty = ({ navigation }) => {
         );
     };
 
+    // Jey: UPDATED: Simplified since multiSelectMode is now externally controlled.
     const handleToggleSelect = (userId) => {
+        if (!multiSelectMode) return; // Only allow selection if mode is active
+
         setSelectedUsers(prevSelected => {
             const newSelected = new Set(prevSelected);
-            if (newSelected.has(userId)) {
+            const isCurrentlySelected = newSelected.has(userId);
+
+            if (isCurrentlySelected) {
                 newSelected.delete(userId);
             } else {
                 newSelected.add(userId);
             }
+            
             return newSelected;
         });
     };
 
-    const handleSelectAll = () => {
-        setMultiSelectMode(true);
-        if (selectedUsers.size === onDutyUsers.length) {
+    const toggleSelectAll = () => {
+        if (selectedUsers.size === filteredUsers.length) {
             setSelectedUsers(new Set());
         } else {
-            const allUserIds = onDutyUsers.map(user => user.id);
+            const allUserIds = filteredUsers.map(user => user.id);
             setSelectedUsers(new Set(allUserIds));
         }
     };
     
-    // Jey: Updated to reset 'isRescuing' status for all selected users
+    // Jey: New function to activate/deactivate multi-select mode
+    const toggleMultiSelectMode = () => {
+        const newState = !multiSelectMode;
+        setMultiSelectMode(newState);
+        if (!newState) {
+            setSelectedUsers(new Set());
+        }
+    };
+    
     const handleMassOffDuty = () => {
         if (selectedUsers.size === 0) {
             Alert.alert("No Users Selected", "Please select at least one user to move off-duty.");
@@ -196,7 +222,7 @@ const OnDutty = ({ navigation }) => {
 
         Alert.alert(
             "Move Users Off-Duty",
-            `Are you sure you want to move ${selectedUsers.size} user(s) to off-duty?`,
+            `Are you sure you want to move ${selectedUsers.size} user(s) to off-duty? This will reset their check-in and rescue status.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -205,7 +231,7 @@ const OnDutty = ({ navigation }) => {
                         try {
                             const updates = Array.from(selectedUsers).map(async (userId) => {
                                 const userRef = doc(db, 'users', userId);
-                                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false });
+                                await updateDoc(userRef, { isOnDutty: false, isCheckedIn: false, isRescuing: false, isRTSConfirmed: false }); // Reset all duty-related flags
                             });
                             await Promise.all(updates);
                             setSelectedUsers(new Set());
@@ -224,17 +250,31 @@ const OnDutty = ({ navigation }) => {
     };
     
     const handleDispatchRescue = async (rescueInitiator, rescuee, rescueAddress) => {
-      console.log(`Jey: Dispatching ${rescueInitiator.name} to rescue ${rescuee.name} at ${rescueAddress}`);
-      Alert.alert(
-        "Rescue Dispatched", 
-        `${rescueInitiator.name} is now en route to rescue ${rescuee.name} at ${rescueAddress}.`
-      );
+      try {
+          // 1. Mark the rescuee as needing rescue
+          await updateDoc(doc(db, 'users', rescuee.id), { isRescued: true });
+          
+          // 2. Mark the rescuer as currently rescuing
+          await updateDoc(doc(db, 'users', rescueInitiator.id), { isRescuing: true });
+          
+          console.log(`Jey: Dispatching ${rescueInitiator.name} to rescue ${rescuee.name} at ${rescueAddress}`);
+          
+          Alert.alert(
+            "Rescue Dispatched", 
+            `${rescueInitiator.name} is now en route to rescue ${rescuee.name} at ${rescueAddress}.`
+          );
+          setIsRescueModalVisible(false); // Close modal on success
+          setSelectedUserForRescue(null); // Clear selected user
+      } catch (error) {
+          console.error("Jey: Error dispatching rescue:", error);
+          Alert.alert("Error", "Failed to dispatch rescue. Please try again.");
+      }
     };
     
     const handleRTS = (driver) => {
         Alert.alert(
             "Confirm Return to Station",
-            `Are you sure you want to confirm that ${driver.name} has safely returned to the station?`,
+            `Are you sure you want to confirm that ${driver.name} has safely returned to the station? This will clear all pending return issues.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -242,8 +282,9 @@ const OnDutty = ({ navigation }) => {
                     onPress: async () => {
                         try {
                             const userRef = doc(db, 'users', driver.id);
-                            await updateDoc(userRef, { isRTSConfirmed: true });
-                            Alert.alert("Success", `Confirmation sent to ${driver.name}.`);
+                            // Jey: Mark RTS confirmed and clear any pending rescue status
+                            await updateDoc(userRef, { isRTSConfirmed: true, isRescued: false, isRescuing: false }); 
+                            Alert.alert("Success", `Return to Station confirmed for ${driver.name}.`);
                             setSelectedUserForRescue(null);
                         } catch (error) {
                             console.error("Jey: Error updating RTS status:", error);
@@ -265,39 +306,57 @@ const OnDutty = ({ navigation }) => {
         const isSelectedForRescue = selectedUserForRescue && selectedUserForRescue.id === item.id;
         
         const handleCardPress = () => {
-            if (companyPlan === 'Executive') {
+            // Jey: Only respond to card press for selection if mode is ACTIVE
+            if (multiSelectMode) {
+                handleToggleSelect(item.id);
+            } else if (companyPlan === 'Executive') {
                 setSelectedUserForRescue(isSelectedForRescue ? null : item);
             }
         };
         
         const hasReturns = returnsCache[item.id] && returnsCache[item.id].length > 0;
-        const showEyeIcon = hasReturns && !item.isRTSConfirmed;
+        const showEyeIcon = hasReturns && !item.isRTSConfirmed; 
 
+        let cardStyle = styles.userCard;
+        if (item.isRescued) {
+            cardStyle = [styles.userCard, styles.cardPriorityRescue];
+        } else if (showEyeIcon) {
+            cardStyle = [styles.userCard, styles.cardPriorityReturns];
+        } 
+        
         return (
             <View>
                 <TouchableOpacity
                     onPress={handleCardPress}
                     style={[
-                        styles.userCard,
-                        isSelectedForRescue && styles.selectedCardForRescue
+                        cardStyle,
+                        isSelectedForRescue && styles.selectedCardForRescue,
+                        isSelected && !isSelectedForRescue && styles.selectedCardForMultiSelect // New style for selection visual
                     ]}
                 >
                     <View style={styles.userInfo}>
+                        {/* Jey: FIX: Checkbox now only appears if multiSelectMode is TRUE */}
                         {multiSelectMode && (
                             <TouchableOpacity onPress={() => handleToggleSelect(item.id)} style={styles.checkboxContainer}>
                                 <Ionicons
                                     name={isSelected ? "checkbox-outline" : "square-outline"}
                                     size={24}
-                                    color={isSelected ? "#6BB9F0" : "#999"}
+                                    color={isSelected ? "#f7a680" : "#999"} // Salmon accent for selection
                                 />
                             </TouchableOpacity>
                         )}
-                        <Ionicons name="person-circle-outline" size={40} color={isTrainer ? "#FFC107" : "#6BB9F0"} />
+                        <Ionicons 
+                            name="person-circle-outline" 
+                            size={40} 
+                            // Jey: Increased left margin if checkbox is NOT visible
+                            style={!multiSelectMode && {marginLeft: 10}}
+                            color={isTrainer ? "#f7a680" : "#007a82"} 
+                        />
                         <View style={styles.userNameContainer}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Text style={styles.userName}>{item.name}</Text>
-                                {/* Jey: This is the new visual indicator for a user on a rescue */}
                                 {item.isRescuing && <View style={styles.rescueIndicator} />}
+                                {item.isRescued && <View style={[styles.rescueIndicator, styles.needRescueIndicator]} />} 
                                 {isTrainer && (
                                     <View style={styles.trainerLabel}>
                                         <Text style={styles.trainerLabelText}>Trainer</Text>
@@ -327,21 +386,25 @@ const OnDutty = ({ navigation }) => {
                                 <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
                             </View>
                         )}
-                        <TouchableOpacity
-                            style={styles.removeButton}
-                            onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
-                        >
-                            <Ionicons name="car-outline" size={20} color="#fff" />
-                        </TouchableOpacity>
+                        {/* Only show single remove button if NOT in multi-select mode */}
+                        {!multiSelectMode && (
+                            <TouchableOpacity
+                                style={styles.removeButton}
+                                onPress={() => handleRemoveFromOnDuty(item.id, item.name)}
+                            >
+                                <Ionicons name="close-outline" size={20} color="#fff" />
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </TouchableOpacity>
+                 {/* Rescue Actions Section (Executive Plan only) */}
                  {companyPlan === 'Executive' && isSelectedForRescue && (
                     <View style={styles.rescueActionContainer}>
                         <TouchableOpacity 
-                            style={styles.rescueButton}
+                            style={[styles.rescueButton, {backgroundColor: '#007a82'}]} // Teal
                             onPress={() => setIsRescueModalVisible(true)}
                         >
-                            <Ionicons name="help-circle-outline" size={20} color="#fff" />
+                            <Ionicons name="locate-outline" size={20} color="#fff" />
                             <Text style={styles.rescueButtonText}>Dispatch Rescue</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
@@ -349,7 +412,7 @@ const OnDutty = ({ navigation }) => {
                             onPress={() => handleRTS(item)}
                         >
                             <MaterialIcons name="home" size={20} color="#fff" />
-                            <Text style={styles.rescueButtonText}>Return to Station</Text>
+                            <Text style={styles.rescueButtonText}>Confirm RTS</Text>
                         </TouchableOpacity>
                     </View>
                 )}
@@ -360,7 +423,7 @@ const OnDutty = ({ navigation }) => {
     if (loading) {
         return (
             <View style={styles.centeredContainer}>
-                <ActivityIndicator size="large" color="#6BB9F0" />
+                <ActivityIndicator size="large" color="#007a82" />
                 <Text style={styles.loadingText}>Loading on-duty list...</Text>
             </View>
         );
@@ -368,11 +431,11 @@ const OnDutty = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>On-Duty Drivers & Trainers</Text>
+            <Text style={styles.title}>Live Dispatch Dashboard</Text>
             
             <TextInput
                 style={styles.searchBar}
-                placeholder="Search for a user..."
+                placeholder="Search by driver name..."
                 placeholderTextColor="#999"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -380,26 +443,41 @@ const OnDutty = ({ navigation }) => {
 
             <View style={styles.headerControls}>
                 <View style={styles.selectAndCount}>
-                    {companyPlan !== 'Executive' && (
-                        <TouchableOpacity onPress={() => setMultiSelectMode(!multiSelectMode)}>
-                            <Text style={styles.selectAllText}>
-                                {multiSelectMode ? 'Cancel Selection' : 'Multi-Select'}
-                            </Text>
-                        </TouchableOpacity>
-                    )}
-                    <Text style={styles.countText}>
-                        <Text style={{color: '#333', fontWeight: 'bold'}}>{onDutyUsers.length}</Text> on-duty | <Text style={{color: '#28a745', fontWeight: 'bold'}}>{checkedInCount}</Text> checked-in
-                    </Text>
+                    {/* Jey: Explicit button to enter/exit multi-select mode */}
+                    <TouchableOpacity onPress={toggleMultiSelectMode}>
+                        <Text style={[styles.selectAllText, styles.listActionText]}>
+                            {multiSelectMode ? 'Exit Select Mode' : 'Select Users'}
+                        </Text>
+                    </TouchableOpacity>
                 </View>
-                {(multiSelectMode && selectedUsers.size > 0) && (
+
+                <Text style={styles.countText}>
+                    <Text style={{color: '#333', fontWeight: 'bold'}}>{onDutyUsers.length}</Text> ON-DUTY | <Text style={{color: '#28a745', fontWeight: 'bold'}}>{checkedInCount}</Text> CHECKED-IN
+                </Text>
+                
+                {/* Jey: Mass Off-Duty Button - Prominent when items are selected */}
+                {(selectedUsers.size > 0) && (
                     <TouchableOpacity style={styles.offDutyAllButton} onPress={handleMassOffDuty}>
                         <Text style={styles.offDutyAllButtonText}>
-                            Move {selectedUsers.size} User(s) Off-Duty
+                            MOVE {selectedUsers.size} OFF-DUTY
                         </Text>
                     </TouchableOpacity>
                 )}
             </View>
             
+            {/* Show Select All/Deselect All row ONLY when multi-select is active */}
+            {multiSelectMode && (
+                <View style={styles.selectAllRow}>
+                    <TouchableOpacity
+                        onPress={toggleSelectAll}
+                        style={{ marginRight: 15 }}
+                    >
+                        <Text style={[styles.selectAllText, styles.listActionText]}>
+                            {selectedUsers.size === filteredUsers.length ? 'Deselect All' : 'Select All'}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
             <FlatList
                 data={filteredUsers}
                 keyExtractor={item => item.id}
@@ -418,22 +496,24 @@ const OnDutty = ({ navigation }) => {
                 onDispatch={handleDispatchRescue}
                 allDrivers={onDutyUsers.filter(d => d.id !== selectedUserForRescue?.id)}
                 rescuer={selectedUserForRescue}
+                rescuee={selectedUserForRescue}
             />
         </View>
     );
 };
 
 const styles = StyleSheet.create({
+    // Jey: --- Global Container ---
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
-        padding: 20,
+        backgroundColor: '#f4f4f4', // Professional light gray background
+        padding: 16, // Adjusted padding
     },
     centeredContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#f4f4f4',
     },
     loadingText: {
         marginTop: 10,
@@ -442,20 +522,28 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 24,
-        fontWeight: 'bold',
-        color: '#6BB9F0',
+        fontWeight: '700', // Bolder title
+        color: '#333333', // Darker text
         marginBottom: 20,
-        textAlign: 'center',
+        textAlign: 'left',
+        paddingTop: 10,
     },
+    
+    // Jey: --- Search & Controls ---
     searchBar: {
         backgroundColor: '#fff',
         borderRadius: 8,
         paddingHorizontal: 15,
         paddingVertical: 12,
-        marginBottom: 15,
+        marginBottom: 10,
         fontSize: 16,
-        borderColor: '#ddd',
+        borderColor: '#e0e0e0', // Subtle border
         borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     headerControls: {
         flexDirection: 'row',
@@ -466,70 +554,81 @@ const styles = StyleSheet.create({
     selectAndCount: {
         flexDirection: 'row',
         alignItems: 'center',
+        flex: 1,
+        justifyContent: 'flex-start',
     },
     selectAllText: {
-        color: '#6BB9F0',
-        fontWeight: 'bold',
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                userSelect: 'none', 
-            },
-        }),
+        color: '#007a82', // Teal accent
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    cancelText: {
+        color: '#f7a680',
     },
     countText: {
-        marginLeft: 15,
+        marginLeft: 15, // Added back margin to separate from the select button
         fontSize: 14,
         color: '#666',
+        flexShrink: 1,
     },
     offDutyAllButton: {
-        backgroundColor: '#FF5733',
-        paddingVertical: 8,
+        backgroundColor: '#f7a680', // Salmon for the mass removal action
+        paddingVertical: 10,
         paddingHorizontal: 15,
-        borderRadius: 5,
+        borderRadius: 8,
         alignItems: 'center',
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease-in-out',
-                ':hover': {
-                    backgroundColor: '#e64e2d',
-                },
-            },
-        }),
     },
     offDutyAllButtonText: {
         color: '#fff',
         fontWeight: 'bold',
+        fontSize: 14,
     },
+    selectAllRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingVertical: 5,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+    },
+    listActionText: {
+        fontSize: 15,
+    },
+    
+    // Jey: --- List Items ---
     listContent: {
         paddingBottom: 20,
     },
     userCard: {
-        backgroundColor: '#fff',
+        backgroundColor: '#ffffff',
         padding: 15,
         borderRadius: 10,
-        marginBottom: 10,
+        marginBottom: 8,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
+        borderLeftWidth: 4, // Visual weight
+        borderLeftColor: '#e0e0e0',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.05,
         shadowRadius: 4,
         elevation: 2,
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease-in-out',
-                ':hover': {
-                    transform: 'translateY(-2px)',
-                },
-            },
-        }),
+    },
+    // Priority status visual cues
+    cardPriorityReturns: {
+        borderLeftColor: '#d1904c', // Gold/Brown for returns
+    },
+    cardPriorityRescue: {
+        borderLeftColor: '#dc3545', // Red for needing rescue
     },
     selectedCardForRescue: {
-        backgroundColor: '#e0f2f7',
+        backgroundColor: '#e6f7f8', // Light teal for rescue selection
+    },
+    selectedCardForMultiSelect: {
+        backgroundColor: '#fffbe6', // Light yellow/cream for multi-selection
+        borderLeftColor: '#f7a680', // Salmon left border
     },
     userInfo: {
         flexDirection: 'row',
@@ -537,11 +636,13 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     userNameContainer: {
+        // Jey: Removed fixed left margin for dynamic spacing
         marginLeft: 10,
+        flexShrink: 1,
     },
     userName: {
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '600',
         color: '#333',
     },
     userEmail: {
@@ -553,12 +654,26 @@ const styles = StyleSheet.create({
         color: '#888',
         marginTop: 4,
     },
+    trainerLabel: {
+        backgroundColor: '#555',
+        borderRadius: 5,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        marginLeft: 8,
+    },
+    trainerLabelText: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    
+    // Jey: --- Status Icons & Buttons ---
     actionButtons: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     checkedInIcon: {
-        backgroundColor: '#28a745',
+        backgroundColor: '#28a745', // Standard Green for Check-in
         width: 30,
         height: 30,
         borderRadius: 15,
@@ -567,22 +682,68 @@ const styles = StyleSheet.create({
         marginRight: 10,
     },
     removeButton: {
-        backgroundColor: '#FF5733',
+        backgroundColor: '#f7a680', // Salmon for single removal
         width: 30,
         height: 30,
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease-in-out',
-                ':hover': {
-                    backgroundColor: '#e64e2d',
-                },
-            },
-        }),
     },
+    viewReturnsButton: {
+        backgroundColor: '#007a82', // Teal for info/view actions
+        height: 30,
+        width: 30,
+        borderRadius: 15,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    rescueIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#007bff', // Blue for Rescuing
+        marginLeft: 8,
+    },
+    needRescueIndicator: {
+        backgroundColor: '#dc3545', // Red for Needs Rescue
+    },
+    checkboxContainer: {
+        marginRight: 10,
+    },
+
+    // Jey: --- Rescue Actions ---
+    rescueActionContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: '#e6f7f8',
+        padding: 12,
+        marginBottom: 8,
+        borderRadius: 10,
+    },
+    rescueButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        borderRadius: 8,
+        flex: 1,
+        marginHorizontal: 5,
+    },
+    rescueButtonText: {
+        marginLeft: 8,
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    rtsButton: {
+        backgroundColor: '#d1904c', // Gold/Brown for RTS (completion/info)
+    },
+    
+    // Jey: --- Empty State ---
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -594,108 +755,6 @@ const styles = StyleSheet.create({
         color: '#999',
         textAlign: 'center',
         marginTop: 10,
-    },
-    trainerLabel: {
-        backgroundColor: '#FFC107',
-        borderRadius: 5,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        marginLeft: 8,
-    },
-    trainerLabelText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    rescueActionContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        backgroundColor: '#6BB9F0',
-        padding: 15,
-        marginBottom: 10,
-        borderRadius: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    rescueButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease-in-out',
-                ':hover': {
-                    backgroundColor: '#5ca3e0',
-                },
-            },
-        }),
-    },
-    rescueButtonText: {
-        marginLeft: 10,
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    rtsButton: {
-        backgroundColor: '#FF9AA2',
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        borderRadius: 5,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease-in-out',
-                ':hover': {
-                    backgroundColor: '#e68a91',
-                },
-            },
-        }),
-    },
-    viewReturnsButton: {
-        backgroundColor: '#6BB9F0',
-        height: 30,
-        width: 30,
-        borderRadius: 100,
-        color: '#6BB9F0',
-        marginRight: 10,
-        paddingLeft: 5,
-        paddingTop: 4,
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease-in-out',
-                ':hover': {
-                    backgroundColor: '#5ca3e0',
-                },
-            },
-        }),
-    },
-    rescueIndicator: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#007bff', 
-        marginLeft: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.3,
-        shadowRadius: 1,
-        elevation: 2,
-    },
-    checkboxContainer: {
-        marginRight: 10,
-        ...Platform.select({
-            web: {
-                cursor: 'pointer',
-            },
-        }),
     },
 });
 

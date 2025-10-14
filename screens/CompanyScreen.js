@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, ScrollView, Image, Switch,
-  TextInput, RefreshControl
+  TextInput, RefreshControl, Platform
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import dashboardIcon from '../assets/png/dashboard.png';
+import businessIcon from '../assets/png/business_outline.png';
 import { MaterialIcons, FontAwesome, Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase';
@@ -22,6 +25,14 @@ const CompanyScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('drivers');
   const [drivers, setDrivers] = useState([]);
   const [pendingDrivers, setPendingDrivers] = useState([]);
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
   const [noticesCount, setNoticesCount] = useState(0);
   const [safetyTipsCount, setSafetyTipsCount] = useState(0);
   const [initialNotices, setInitialNotices] = useState([]);
@@ -91,7 +102,8 @@ const CompanyScreen = ({ navigation }) => {
   const handleAddToOnDuty = async (driverId, driverName) => {
     try {
       const userRef = doc(db, 'users', driverId);
-      await updateDoc(userRef, { isOnDutty: true });
+      // Jey: Added onDutySince timestamp for live tracking
+      await updateDoc(userRef, { isOnDutty: true, onDutySince: new Date() });
       Alert.alert("Success", `${driverName} has been added to the on-duty list.`);
     } catch (error) {
       console.error("Jey: Error adding driver to on-duty list:", error);
@@ -107,10 +119,12 @@ const CompanyScreen = ({ navigation }) => {
 
     setLoading(true);
     const updatePromises = [];
+    const currentTime = new Date(); // Use a single timestamp for all drivers
 
     for (const driverId of selectedDrivers) {
       const userRef = doc(db, 'users', driverId);
-      updatePromises.push(updateDoc(userRef, { isOnDutty: true }));
+      // Jey: Added onDutySince timestamp for live tracking
+      updatePromises.push(updateDoc(userRef, { isOnDutty: true, onDutySince: currentTime }));
     }
 
     try {
@@ -335,14 +349,15 @@ const CompanyScreen = ({ navigation }) => {
     const isTrainer = item.role === 'trainer';
 
     return (
-      <View style={styles.listItem}>
+      <View style={[styles.listItem, isTrainer && { borderLeftColor: '#f7a680' }]}>
         <View style={styles.driverInfo}>
           {multiSelectMode && !isPending && (
             <TouchableOpacity onPress={() => toggleDriverSelection(item.id)} style={styles.checkboxContainer}>
               <Ionicons
                 name={selectedDrivers.has(item.id) ? "checkbox-outline" : "square-outline"}
                 size={24}
-                color={selectedDrivers.has(item.id) ? '#FF9AA2' : '#999'}
+                // Jey: Updated checkbox color to professional salmon
+                color={selectedDrivers.has(item.id) ? '#f7a680' : '#999'} 
               />
             </TouchableOpacity>
           )}
@@ -353,19 +368,20 @@ const CompanyScreen = ({ navigation }) => {
               style={styles.driverProfilePhoto}
             />
           ) : (
-            <FontAwesome name="user-circle" size={30} color="#6BB9F0" style={styles.driverProfilePhotoPlaceholder} />
+            // Jey: Updated placeholder color to a more neutral blue/gray
+            <FontAwesome name="user-circle" size={30} color="#a0b8c8" style={styles.driverProfilePhotoPlaceholder} />
           )}
           <View style={styles.nameAndRole}>
             <Text style={styles.driverName}>{item.name}</Text>
-            {isTrainer && <Text style={styles.roleTag}>Trainer</Text>}
+            {/* Jey: Updated role tag color for professionalism */}
+            {isTrainer && <Text style={[styles.roleTag, {backgroundColor: '#555'}]}>Trainer</Text>} 
           </View>
           {isPending ? (
-            <MaterialIcons name="pending" size={20} color="orange" />
+            <MaterialIcons name="pending" size={20} color="#f7a680" /> // Use salmon for pending
           ) : (
-            <MaterialIcons name="verified" size={20} color="green" />
+            <MaterialIcons name="verified" size={20} color="#007a82" /> // Use teal for verified/active
           )}
         </View>
-
         <View style={styles.actionButtons}>
           {isPending ? (
             <TouchableOpacity
@@ -381,7 +397,7 @@ const CompanyScreen = ({ navigation }) => {
                   style={[styles.actionBtn, isOnDuty && styles.activeActionBtn]}
                   onPress={() => isOnDuty ? handleRemoveFromOnDuty(item.id, item.name) : handleAddToOnDuty(item.id, item.name)}
                 >
-                  <Ionicons name="car-outline" size={20} color={isOnDuty ? '#fff' : '#6BB9F0'} />
+                  <Ionicons name="car-outline" size={20} color={isOnDuty ? '#fff' : '#007a82'} /> {/* Use teal icon */}
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.deactivateBtn]}
@@ -402,7 +418,7 @@ const CompanyScreen = ({ navigation }) => {
       case 'drivers':
         return (
           <ScrollView contentContainerStyle={styles.scrollContentContainer} refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#007a82" />
           }>
             <TextInput
               style={styles.searchBar}
@@ -419,7 +435,7 @@ const CompanyScreen = ({ navigation }) => {
                     </View>
                     <View style={styles.onDutyContainer}>
                         <Text style={styles.onDutyTitle}>On-Duty</Text>
-                        <Text style={styles.statsValue}>{onDutyCount}</Text>
+                        <Text style={[styles.statsValue, {color: '#fff'}]}>{onDutyCount}</Text>
                     </View>
                 </View>
                 <TouchableOpacity
@@ -466,7 +482,7 @@ const CompanyScreen = ({ navigation }) => {
             />
             <View style={styles.statsCard}>
               <Text style={styles.statsTitle}>Pending Approvals</Text>
-              <Text style={styles.statsValue}>{pendingDrivers.length}</Text>
+              <Text style={[styles.statsValue, {color: '#f7a680'}]}>{pendingDrivers.length}</Text>
             </View>
             <FlatList
               data={filteredPendingDrivers}
@@ -502,7 +518,7 @@ const CompanyScreen = ({ navigation }) => {
               <View style={styles.gridContainer}>
                 {companyPlan === 'Executive' && (
                   <TouchableOpacity
-                    style={[styles.gridButton, { backgroundColor: '#FF6347' }]}
+                    style={[styles.gridButton, { backgroundColor: '#f7a680' }]} // Salmon
                     onPress={() => navigation.navigate('ManagePosts')}
                   >
                     <MaterialIcons name="post-add" size={30} color="#fff" />
@@ -512,7 +528,7 @@ const CompanyScreen = ({ navigation }) => {
                 
                 {companyPlan === 'Executive' && (
                   <TouchableOpacity
-                    style={[styles.gridButton, { backgroundColor: '#4682B4' }]}
+                    style={[styles.gridButton, { backgroundColor: '#336699' }]} // Darker Blue
                     onPress={() => navigation.navigate('Team')}
                   >
                     <Ionicons name="people-outline" size={30} color="#fff" />
@@ -521,7 +537,7 @@ const CompanyScreen = ({ navigation }) => {
                 )}
                 
                 <TouchableOpacity
-                  style={[styles.gridButton, { backgroundColor: '#32CD32' }]}
+                  style={[styles.gridButton, { backgroundColor: '#007a82' }]} // Teal
                   onPress={() => navigation.navigate('GroupChat')}
                 >
                   <Ionicons name="people-circle-outline" size={30} color="#fff" />
@@ -529,7 +545,7 @@ const CompanyScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.gridButton, { backgroundColor: '#FFD700' }]}
+                  style={[styles.gridButton, { backgroundColor: '#d1904c' }]} // Gold/Brown
                   onPress={() => navigation.navigate('OneChat')}
                 >
                   <Ionicons name="chatbubbles-outline" size={30} color="#fff" />
@@ -547,16 +563,17 @@ const CompanyScreen = ({ navigation }) => {
               <>
                 <View style={styles.moreOptionButton}>
                   <View style={styles.moreOptionTextContainer}>
-                    <MaterialIcons name="chat" size={24} color="#6BB9F0" />
+                    <MaterialIcons name="chat" size={24} color="#007a82" />
                     <Text style={styles.moreOptionText}>Allow Chat</Text>
                   </View>
                   {settingsLoading ? (
-                    <ActivityIndicator size="small" color="#6BB9F0" />
+                    <ActivityIndicator size="small" color="#007a82" />
                   ) : (
                     <Switch
                       onValueChange={toggleAllowChat}
                       value={allowChat}
-                      trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                      // Jey: Updated track colors for professional look
+                      trackColor={{ false: "#d9d9d9", true: "#007a82" }}
                       thumbColor={allowChat ? "#fff" : "#f4f3f4"}
                     />
                   )}
@@ -564,16 +581,17 @@ const CompanyScreen = ({ navigation }) => {
 
                 <View style={styles.moreOptionButton}>
                   <View style={styles.moreOptionTextContainer}>
-                    <MaterialIcons name="post-add" size={24} color="#6BB9F0" />
+                    <MaterialIcons name="post-add" size={24} color="#007a82" />
                     <Text style={styles.moreOptionText}>Allow Posts</Text>
                   </View>
                   {settingsLoading ? (
-                    <ActivityIndicator size="small" color="#6BB9F0" />
+                    <ActivityIndicator size="small" color="#007a82" />
                   ) : (
                     <Switch
                       onValueChange={toggleAllowPosts}
                       value={allowPosts}
-                      trackColor={{ false: "#767577", true: "#FF9AA2" }}
+                      // Jey: Updated track colors for professional look
+                      trackColor={{ false: "#d9d9d9", true: "#007a82" }}
                       thumbColor={allowPosts ? "#fff" : "#f4f3f4"}
                     />
                   )}
@@ -585,7 +603,7 @@ const CompanyScreen = ({ navigation }) => {
               style={styles.moreOptionButton}
               onPress={() => setIsNoticeModalVisible(true)}
             >
-              <MaterialIcons name="announcement" size={24} color="#6BB9F0" />
+              <MaterialIcons name="announcement" size={24} color="#007a82" />
               <Text style={styles.moreOptionText}>Notices ({noticesCount})</Text>
             </TouchableOpacity>
 
@@ -593,7 +611,7 @@ const CompanyScreen = ({ navigation }) => {
               style={styles.moreOptionButton}
               onPress={() => setIsSafetyTipModalVisible(true)}
             >
-              <MaterialIcons name="security" size={24} color="#6BB9F0" />
+              <MaterialIcons name="security" size={24} color="#007a82" />
               <Text style={styles.moreOptionText}>Safety Tips ({safetyTipsCount})</Text>
             </TouchableOpacity>
 
@@ -601,7 +619,7 @@ const CompanyScreen = ({ navigation }) => {
               style={styles.moreOptionButton}
               onPress={() => navigation.navigate('Settings')}
             >
-              <MaterialIcons name="settings" size={24} color="#6BB9F0" />
+              <MaterialIcons name="settings" size={24} color="#007a82" />
               <Text style={styles.moreOptionText}>Settings</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -614,7 +632,7 @@ const CompanyScreen = ({ navigation }) => {
   if (loading) {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#6BB9F0" />
+        <ActivityIndicator size="large" color="#007a82" /> {/* Teal spinner */}
         <Text style={styles.loadingText}>Loading company data...</Text>
       </View>
     );
@@ -622,27 +640,39 @@ const CompanyScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* Jey: REVISED PROFESSIONAL HEADER STRUCTURE */}
       <View style={styles.header}>
-        {/* Jey: Use companyLogoUrl if available, otherwise fallback to userData.profilePhotoURL */}
-        {companyLogoUrl ? (
-          <Image source={{ uri: companyLogoUrl }} style={styles.companyLogo} />
-        ) : userData?.profilePhotoURL ? (
-          <Image source={{ uri: userData.profilePhotoURL }} style={styles.companyLogo} />
-        ) : (
-          <MaterialIcons name="business" size={30} color="#6BB9F0" style={styles.companyLogoPlaceholder} />
-        )}
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{userData.dspName} Dashboard</Text>
-          <Text style={styles.planLabel}>{companyPlan}</Text>
+        <View style={styles.headerContentWrapper}>
+          {/* Company Logo/Placeholder */}
+          {companyLogoUrl ? (
+            <Image source={{ uri: companyLogoUrl }} style={styles.companyLogo} />
+          ) : userData?.profilePhotoURL ? (
+            <Image source={{ uri: userData.profilePhotoURL }} style={styles.companyLogo} />
+          ) : (
+            <MaterialIcons name="business" size={30} color="#a0b8c8" style={styles.companyLogoPlaceholder} />
+          )}
+
+          {/* Title and Plan */}
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {userData.dspName}
+            </Text>
+            <View style={styles.planBadge}>
+              <Text style={styles.planLabel}>{companyPlan} Plan</Text>
+            </View>
+          </View>
         </View>
+
+        {/* Refresh Button (always on the right) */}
         <TouchableOpacity onPress={handleRefresh} style={styles.refreshIconContainer}>
           {refreshing ? (
-            <ActivityIndicator size="small" color="#6BB9F0" />
+            <ActivityIndicator size="small" color="#007a82" />
           ) : (
-            <Ionicons name="refresh" size={24} color="#6BB9F0" />
+            <Ionicons name="refresh" size={24} color="#007a82" />
           )}
         </TouchableOpacity>
       </View>
+      {/* Jey: END REVISED HEADER */}
 
       <View style={styles.tabContainer}>
         {['drivers', 'requests', 'gatecodes', 'chat', 'more'].map((tab) => (
@@ -659,15 +689,15 @@ const CompanyScreen = ({ navigation }) => {
                 tab === 'chat' ? 'chat' : 'more-horiz'
               }
               size={24}
-              color={activeTab === tab ? '#FF9AA2' : '#666'}
+              // Jey: Updated tab icon color to teal
+              color={activeTab === tab ? '#007a82' : '#666'}
             />
-            {/* Jey: This is the new notification badge for the requests tab. */}
+            {/* Jey: Notification badge for the requests tab using salmon for warning */}
             {tab === 'requests' && pendingDrivers.length > 0 && (
-              <View style={styles.notificationBadge}>
+              <View style={[styles.notificationBadge, { backgroundColor: '#f7a680' }]}>
                 <Text style={styles.notificationText}>{pendingDrivers.length}</Text>
               </View>
             )}
-            {/* End of new badge code */}
             <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
               {tab === 'more' ? 'More' : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </Text>
@@ -687,12 +717,13 @@ const CompanyScreen = ({ navigation }) => {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
+            // Jey: Updated confirmation button to the primary teal accent color
             style={[styles.multiSelectButton, styles.confirmButton, selectedDrivers.size === 0 && styles.disabledButton]}
             onPress={handleMultiSelectOnDuty}
             disabled={selectedDrivers.size === 0}
           >
             <Ionicons name="add-circle-outline" size={20} color="#fff" />
-            <Text style={[styles.multiSelectButtonText, {marginLeft: 5}]}>Mark {selectedDrivers.size} On-Duty</Text>
+            <Text style={[styles.multiSelectButtonText, {marginLeft: 5, color: '#fff'}]}>Mark {selectedDrivers.size} On-Duty</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -715,81 +746,90 @@ const CompanyScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  // Jey: --- Global Container ---
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f4f4f4', // Lighter, more professional background
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f4f4f4',
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
     color: '#666',
   },
+  
+  // Jey: --- REVISED PROFESSIONAL HEADER STYLES ---
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    marginTop: 30,
-    backgroundColor: '#fff',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 48 : 20,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
+    marginBottom: 8,
+  },
+  headerContentWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  companyLogo: {
+    width: 48,
+    height: 48,
+    borderRadius: 8, // Corporate square logo
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  companyLogoPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#e9e9e9',
   },
   headerTitleContainer: {
-    flex: 1,
-    marginLeft: 10,
+    marginLeft: 12,
+    flex: 1, // Allows title to take up remaining space
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
+    fontWeight: '700',
+    color: '#333333',
+    marginBottom: 2,
+  },
+  planBadge: {
+    backgroundColor: '#e6f7f8', // Light Teal background
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    alignSelf: 'flex-start', // Important to wrap content horizontally
   },
   planLabel: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 2,
-  },
-  companyLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-  companyLogoPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    fontSize: 12,
+    color: '#007a82', // Teal text
+    fontWeight: '600',
   },
   refreshIconContainer: {
-    padding: 5,
+    padding: 8,
+    marginLeft: 15,
   },
-  selectDriversButton: {
-    backgroundColor: '#E0F2F7',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginVertical: 10,
-    alignItems: 'center',
-  },
-  selectDriversButtonText: {
-    color: '#6BB9F0',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  // Jey: --- END REVISED HEADER STYLES ---
+
+  // Jey: --- Tab Bar ---
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#e0e0e0',
+    elevation: 2,
   },
   tabButton: {
     flex: 1,
@@ -797,24 +837,23 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#FF9AA2',
+    borderBottomWidth: 3, // Thicker underline for emphasis
+    borderBottomColor: '#007a82', // Teal accent
   },
   tabText: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 5,
+    color: '#666666',
+    marginTop: 4,
   },
   activeTabText: {
-    color: '#FF9AA2',
-    fontWeight: 'bold',
+    color: '#007a82', // Teal accent
+    fontWeight: '700',
   },
-  // Jey: New styles for the notification badge
   notificationBadge: {
     position: 'absolute',
     top: 5,
     right: 25,
-    backgroundColor: '#FF5733',
+    backgroundColor: '#f7a680', // Professional Salmon/Orange for warnings
     borderRadius: 10,
     width: 20,
     height: 20,
@@ -826,24 +865,42 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  // End of new styles
   content: {
     flex: 1,
-    padding: 15,
+    paddingHorizontal: 15,
   },
-  listContentContainer: {
+  scrollContentContainer: {
     paddingBottom: 20,
+    paddingTop: 10,
+  },
+
+  // Jey: --- Search and Stats ---
+  searchBar: {
+    height: 45,
+    borderColor: '#ddd',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    fontSize: 16,
+    marginBottom: 15,
+    backgroundColor: '#ffffff', // White search bar
+    color: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   statsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 24,
     marginBottom: 15,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05, // Lighter shadow for premium look
+    shadowRadius: 6,
+    elevation: 3,
   },
   statsCountRow: {
     flexDirection: 'row',
@@ -853,18 +910,18 @@ const styles = StyleSheet.create({
   },
   statsTitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#555555',
   },
   statsValue: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#6BB9F0',
-    marginTop: 5,
+    color: '#007a82', // Teal accent for primary count
+    marginTop: 4,
   },
   onDutyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FF9AA2',
+    backgroundColor: '#007a82', // Teal background
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 20,
@@ -874,16 +931,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  onDutyValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
   onDutyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6BB9F0',
+    backgroundColor: '#007a82', // Teal button
     borderRadius: 8,
     paddingVertical: 12,
   },
@@ -893,14 +945,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginRight: 10,
   },
-  listItem: {
-    backgroundColor: '#fff',
+  
+  // Jey: --- Driver List Items ---
+  selectDriversButton: {
+    backgroundColor: '#e6f7f8', // Light teal background
+    borderColor: '#007a82',
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 8,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  selectDriversButtonText: {
+    color: '#007a82', // Teal text
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  listItem: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
     padding: 15,
-    marginBottom: 10,
+    marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    borderLeftWidth: 4, // Visual weight
+    borderLeftColor: '#e0e0e0', // Neutral color
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03, // Very subtle lift
+    shadowRadius: 2,
+    elevation: 1,
   },
   driverInfo: {
     flexDirection: 'row',
@@ -913,7 +989,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#e0e0e0',
   },
   driverProfilePhotoPlaceholder: {
     marginRight: 10,
@@ -929,7 +1005,7 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   roleTag: {
-    backgroundColor: '#008080',
+    backgroundColor: '#555', // Neutral dark gray for Trainer
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
@@ -943,38 +1019,22 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     padding: 8,
-    borderRadius: 5,
+    borderRadius: 6,
     marginLeft: 10,
-    backgroundColor: '#E0F2F7',
+    backgroundColor: '#e6f7f8', // Light teal background
   },
   activeActionBtn: {
-    backgroundColor: '#6BB9F0',
+    backgroundColor: '#007a82', // Teal
   },
   deactivateBtn: {
-    backgroundColor: '#FF5733',
+    backgroundColor: '#f7a680', // Professional Salmon/Orange for danger/removal
   },
   activateBtn: {
-    backgroundColor: '#6BB9F0',
+    backgroundColor: '#007a82', // Teal for activation
   },
   btnText: {
     color: '#fff',
     fontWeight: 'bold',
-  },
-  searchBar: {
-    height: 45,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    marginBottom: 15,
-    backgroundColor: '#f1f1f1',
-    color: '#333',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
   emptyListText: {
     textAlign: 'center',
@@ -982,28 +1042,71 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#999',
   },
+
+  // Jey: --- Multi-Select ---
+  checkboxContainer: {
+    marginRight: 10,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  multiSelectActionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  multiSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#e6f7f8', // Light teal for secondary action
+  },
+  multiSelectButtonText: {
+    color: '#007a82', // Teal text
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  confirmButton: {
+    backgroundColor: '#007a82', // Teal for primary action
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+
+  // Jey: --- Chat/More Sections ---
   chatSectionScrollView: {
     flex: 1,
   },
   chatSectionContentContainer: {
-    padding: 15,
+    padding: 0, // Padding is handled by content
     paddingBottom: 20,
   },
   chatInfoSection: {
     backgroundColor: '#fff',
     borderRadius: 10,
-    padding: 15,
+    padding: 20,
     marginBottom: 15,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
   chatInfoSectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#6BB9F0',
+    color: '#333333',
     marginBottom: 5,
     textAlign: 'center',
   },
@@ -1016,12 +1119,12 @@ const styles = StyleSheet.create({
   viewAllButton: {
     marginTop: 10,
     paddingVertical: 8,
-    backgroundColor: '#E0F2F7',
+    backgroundColor: '#e6f7f8',
     borderRadius: 5,
     alignItems: 'center',
   },
   viewAllButtonText: {
-    color: '#6BB9F0',
+    color: '#007a82',
     fontWeight: 'bold',
     fontSize: 14,
   },
@@ -1029,7 +1132,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginTop: 15,
+    marginTop: 5,
     marginBottom: 15,
   },
   gridButton: {
@@ -1053,20 +1156,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   moreContentContainer: {
-    padding: 15,
+    padding: 0, // Padding is handled by content
     paddingBottom: 20,
   },
   moreOptionButton: {
     backgroundColor: '#fff',
     borderRadius: 10,
     padding: 20,
-    marginBottom: 15,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -1077,48 +1180,9 @@ const styles = StyleSheet.create({
   },
   moreOptionText: {
     marginLeft: 15,
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '500', // Slightly lighter weight for better readability
     color: '#333',
-  },
-  checkboxContainer: {
-    marginRight: 10,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  multiSelectActionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  multiSelectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#E0F2F7',
-  },
-  multiSelectButtonText: {
-    color: '#6BB9F0',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  confirmButton: {
-    backgroundColor: '#FF9AA2',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
   },
 });
 

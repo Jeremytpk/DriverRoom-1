@@ -34,7 +34,17 @@ const SafetyTips = ({ isVisible, onClose, initialSafetyTips, onSafetyTipsUpdated
         orderBy('createdAt', 'desc')
       );
       const safetyTipsSnapshot = await getDocs(safetyTipsQuery);
-      const fetchedSafetyTips = safetyTipsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const fetchedSafetyTips = safetyTipsSnapshot.docs.map(doc => {
+        const data = { id: doc.id, ...doc.data() };
+        console.log('SafetyTips: Fetched item:', data);
+        if (data.imageUrl || data.imageURL) {
+          console.log('SafetyTips: Image URL found:', data.imageUrl || data.imageURL);
+        } else {
+          console.log('SafetyTips: No image URL for item:', data.title);
+          console.log('SafetyTips: Available fields:', Object.keys(data));
+        }
+        return data;
+      });
       setSafetyTips(fetchedSafetyTips);
       if (onSafetyTipsUpdated) {
         onSafetyTipsUpdated(fetchedSafetyTips); // Callback to update parent (CompanyScreen)
@@ -185,7 +195,22 @@ const SafetyTips = ({ isVisible, onClose, initialSafetyTips, onSafetyTipsUpdated
 
   const renderSafetyTipItem = ({ item }) => (
     <View style={styles.contentItem}>
-      {item.imageUrl && <Image source={{ uri: item.imageUrl }} style={styles.contentImage} />}
+      {(item.imageUrl || item.imageURL) ? (
+        <Image 
+          source={{ uri: item.imageUrl || item.imageURL }} 
+          style={styles.contentImage}
+          onError={(error) => {
+            console.log('SafetyTips: Image failed to load:', item.imageUrl || item.imageURL, error);
+          }}
+          onLoad={() => {
+            console.log('SafetyTips: Image loaded successfully:', item.imageUrl || item.imageURL);
+          }}
+        />
+      ) : (
+        <View style={[styles.contentImage, styles.placeholderImage]}>
+          <MaterialIcons name="image" size={20} color="#ccc" />
+        </View>
+      )}
       <View style={styles.contentItemTextContainer}>
         <Text style={styles.contentItemTitle}>{item.title}</Text>
         <Text style={styles.contentItemMessage}>{item.message}</Text>
@@ -336,6 +361,13 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     marginRight: 10,
     resizeMode: 'cover',
+  },
+  placeholderImage: {
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   contentItemTextContainer: {
     flex: 1,

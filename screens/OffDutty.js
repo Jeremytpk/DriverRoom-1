@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
     View,
     Text,
@@ -22,6 +23,7 @@ import { ScrollView } from 'react-native-gesture-handler';
 
 const OffDutty = () => {
     const navigation = useNavigation();
+    const { demoMode, userData } = useAuth();
     const [isOnDutyStatus, setIsOnDutyStatus] = useState(false);
     const [loadingStatus, setLoadingStatus] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -147,6 +149,8 @@ const OffDutty = () => {
                 )}
             </TouchableOpacity>
 
+
+
             {/* Jey: New Logout Button */}
             <TouchableOpacity
                 style={styles.logoutButton}
@@ -236,6 +240,23 @@ const styles = StyleSheet.create({
         width: 20,
         height: 20,
         tintColor: '#FFFFFF',
+    },
+    demoButton: {
+        backgroundColor: '#FFD580',
+        borderRadius: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 30,
+        marginTop: 25,
+        marginBottom: 10,
+        alignItems: 'center',
+        width: 200,
+        alignSelf: 'center',
+    },
+    demoButtonText: {
+        color: '#333',
+        fontWeight: '700',
+        fontSize: 17,
+        textAlign: 'center',
     },
     // Jey: Styles for the new Logout Button
     logoutButton: {

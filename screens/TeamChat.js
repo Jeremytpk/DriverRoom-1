@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Alert, KeyboardAvoidingView, Platform
@@ -11,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const Colors = {
   primaryTeal: '#008080',
@@ -28,7 +31,62 @@ const Colors = {
 
 const TeamChat = () => {
     const { userData } = useAuth();
+    const navigation = useNavigation();
     const db = getFirestore();
+    // --- Notification Setup ---
+    useEffect(() => {
+      registerForPushNotificationsAsync().then(token => {
+        if (token && userData?.uid) {
+          // Store the FCM token in Firestore for this user
+          const userRef = doc(db, 'users', userData.uid);
+          updateDoc(userRef, { fcmToken: token });
+        }
+      });
+    }, [userData?.uid]);
+
+    // Listen for foreground notifications
+    useEffect(() => {
+      const subscription = Notifications.addNotificationReceivedListener(notification => {
+        // Optionally handle notification in-app
+      });
+      return () => subscription.remove();
+    }, []);
+
+    // Listen for new messages and show local notification if not on TeamChat
+    useEffect(() => {
+      if (!userData?.dspName) return;
+      const messagesQuery = query(
+        collection(db, 'teamChats', userData.dspName, 'messages'),
+        orderBy('createdAt', 'desc')
+      );
+      let lastMessageId = null;
+      const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+        if (!snapshot.empty) {
+          const latest = snapshot.docs[0];
+          if (lastMessageId && latest.id !== lastMessageId && latest.data().senderId !== userData.uid) {
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: `New message in ${userData.dspName}`,
+                body: latest.data().text,
+                data: { screen: 'TeamChat' },
+              },
+              trigger: null,
+            });
+          }
+          lastMessageId = latest.id;
+        }
+      });
+      return () => unsubscribe();
+    }, [userData?.dspName]);
+
+    // Configure navigation header for iOS - hide back button title
+    useLayoutEffect(() => {
+      navigation.setOptions({
+        headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+        headerBackTitleVisible: false,
+      });
+    }, [navigation]);
+
     const [teamMessages, setTeamMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
 
@@ -122,6 +180,35 @@ const TeamChat = () => {
         </KeyboardAvoidingView>
     );
 };
+
+// --- Register for Push Notifications (FCM) ---
+async function registerForPushNotificationsAsync() {
+  let token;
+  if (Constants.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      alert('Failed to get push token for push notification!');
+      return;
+    }
+    token = (await Notifications.getExpoPushTokenAsync()).data;
+  } else {
+    alert('Must use physical device for Push Notifications');
+  }
+  if (Platform.OS === 'android') {
+    Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
+  return token;
+}
 
 const styles = StyleSheet.create({
   chatWrapper: {
@@ -223,5 +310,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+
+/*
+--- Firebase Cloud Function Example (deploy in drr-functions/index.js) ---
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+exports.sendTeamChatNotification = functions.firestore
+  .document('teamChats/{dspName}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const message = snap.data();
+    const dspName = context.params.dspName;
+    // Get all users in this team
+    const usersSnap = await admin.firestore().collection('users').where('dspName', '==', dspName).get();
+    const tokens = [];
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.fcmToken && data.uid !== message.senderId) tokens.push(data.fcmToken);
+    });
+    if (tokens.length > 0) {
+      const payload = {
+        notification: {
+          title: `New message in ${dspName}`,
+          body: message.text,
+        },
+        data: { screen: 'TeamChat' },
+      };
+      await admin.messaging().sendToDevice(tokens, payload);
+    }
+    return null;
+  });
+*/
 
 export default TeamChat;

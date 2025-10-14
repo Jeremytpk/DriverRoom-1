@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image,
   ScrollView, Dimensions, Modal, Platform, RefreshControl, Alert, Linking
@@ -21,49 +21,90 @@ import Team from '../screens/Team';
 import TeamChat from '../screens/TeamChat';
 import ReturnsModal from '../components/ReturnsModal';
 import ReturnsDetail from '../screens/ReturnsDetail';
+import BottomTab from '../components/BottomTab';
+import CustomHeader from '../components/CustomHeader';
 
 const Stack = createStackNavigator();
 
 const Colors = {
-  primaryTeal: '#008080',
-  accentSalmon: '#FA8072',
-  checkInGreen: '#28a745',
-  lightBackground: '#f8f8f8',
+  primaryTeal: '#2E8B57', // Warmer sea green
+  accentSalmon: '#FF6B6B', // Friendlier coral
+  checkInGreen: '#4CAF50', // Modern green
+  lightBackground: '#F8FAFB', // Softer background
   white: '#FFFFFF',
-  darkText: '#333333',
-  mediumText: '#666666',
-  lightGray: '#ececec',
-  border: '#e0e0e0',
-  inactiveGray: '#A0A0A0',
-  checkOutRed: '#dc3545',
+  darkText: '#2C3E50', // Warmer dark text
+  mediumText: '#5A6C7D', // Friendlier medium text
+  lightGray: '#F0F2F5', // Modern gray
+  border: '#E8EAED', // Subtle borders
+  inactiveGray: '#9AA0A6', // Modern inactive
+  checkOutRed: '#F44336', // Material red
+  cardBackground: '#FFFFFF',
+  successGreen: '#00C851',
+  warningOrange: '#FF8A00',
+  safetyBlue: '#2196F3',
 };
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// --- Extracted DriverProfileHeader Component ---
-const DriverProfileHeader = ({ userData }) => (
-  <View style={styles.driverProfileSection}>
-    <View style={styles.avatarContainer}>
-      {userData?.profilePictureUrl ? (
-        <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
-      ) : (
-        <View style={[styles.avatar, styles.avatarPlaceholder]}>
-          <Image source={require('../assets/png/profile.png')} style={[styles.profilePng, { tintColor: Colors.white }]} />
+// --- Enhanced Friendly Driver Profile Header Component ---
+const DriverProfileHeader = ({ userData }) => {
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  const getMotivationalMessage = () => {
+    const messages = [
+      'Ready for another great day? 🚛',
+      'Let\'s make it a safe day! 🛡️',
+      'Drive safe, drive smart! 💪',
+      'Your safety is our priority! ⭐',
+      'Another day, another opportunity! 🌟'
+    ];
+    return messages[new Date().getDay() % messages.length];
+  };
+
+  return (
+    <LinearGradient
+      colors={[Colors.primaryTeal, '#3A9B6C']}
+      style={styles.driverProfileSection}
+    >
+      <View style={styles.profileContent}>
+        <View style={styles.profileLeft}>
+          <View style={styles.avatarContainer}>
+            {userData?.profilePictureUrl ? (
+              <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <MaterialIcons name="person" size={28} color={Colors.white} />
+              </View>
+            )}
+            <View style={styles.onlineIndicator} />
+          </View>
+          <View style={styles.greetingContainer}>
+            <Text style={styles.greetingText}>{getGreeting()},</Text>
+            <Text style={styles.profileName}>{userData?.name?.split(' ')[0] || 'Driver'}! 👋</Text>
+            <Text style={styles.motivationalText}>{getMotivationalMessage()}</Text>
+            {(userData?.role === 'driver' || userData?.role === 'trainer') && (
+              <View style={styles.driverInfo}>
+                <MaterialIcons name="business" size={14} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.dspName}>{userData?.dspName || 'Your Company'}</Text>
+              </View>
+            )}
+          </View>
         </View>
-      )}
-    </View>
-    <Text style={styles.profileName}>{userData?.name || 'User'}</Text>
-    {(userData?.role === 'driver' || userData?.role === 'trainer') && (
-      <View style={styles.driverInfo}>
-        <Image
-          source={require('../assets/png/business_outline.png')}
-          style={[styles.businessOutlinePng, { tintColor: Colors.mediumText }]}
-        />
-        <Text style={styles.dspName}>{userData?.dspName || 'Your DSP'}</Text>
+        <View style={styles.profileRight}>
+          <View style={styles.timeContainer}>
+            <Text style={styles.timeText}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
+            <Text style={styles.dateText}>{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+          </View>
+        </View>
       </View>
-    )}
-  </View>
-);
+    </LinearGradient>
+  );
+};
 
 const HomeScreen = ({ navigation }) => {
   const { userData, unreadCounts, setUserData } = useAuth();
@@ -71,6 +112,14 @@ const HomeScreen = ({ navigation }) => {
   const [safetyTips, setSafetyTips] = useState([]);
   const [notices, setNotices] = useState([]);
   const [loadingTips, setLoadingTips] = useState(true);
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
   const [loadingNotices, setLoadingNotices] = useState(true);
   const scrollViewRef = useRef(null);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
@@ -82,26 +131,11 @@ const HomeScreen = ({ navigation }) => {
 
   const currentNavigation = useNavigation();
   const route = useRoute();
-  const [activeTab, setActiveTab] = useState('HomeTab');
   const [isReturnsModalVisible, setIsReturnsModalVisible] = useState(false);
   const [isRTSConfirmed, setIsRTSConfirmed] = useState(userData?.isRTSConfirmed || false);
   const [rescueRequest, setRescueRequest] = useState(null);
-
-  useEffect(() => {
-    const currentRouteName = route.name;
-
-    if (currentRouteName === 'HomeScreenContent') {
-      setActiveTab('HomeTab');
-    } else if (currentRouteName === 'Posts') {
-      setActiveTab('PostsTab');
-    } else if (currentRouteName === 'AdminTab') {
-      setActiveTab('AdminTab');
-    } else if (currentRouteName === 'CompanyTab') {
-      setActiveTab('CompanyTab');
-    } else if (currentRouteName === 'Settings') {
-      setActiveTab('SettingsTab');
-    }
-  }, [route.name]);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [checkInAction, setCheckInAction] = useState(null); // 'in' or 'out'
 
   useEffect(() => {
     if (!userData?.uid) return;
@@ -274,69 +308,33 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const handleTabPress = (tabName) => {
-    if (tabName === activeTab) {
-      return;
-    }
 
-    setActiveTab(tabName);
 
-    let screenNameToNavigate = '';
-    switch (tabName) {
-      case 'HomeTab':
-        screenNameToNavigate = 'HomeScreenContent';
-        break;
-      case 'PostsTab':
-        screenNameToNavigate = 'Posts';
-        break;
-      case 'AdminTab':
-        screenNameToNavigate = 'AdminTab';
-        break;
-      case 'CompanyTab':
-        screenNameToNavigate = 'CompanyTab';
-        break;
-      case 'SettingsTab':
-        screenNameToNavigate = 'Settings';
-        break;
-      default:
-        screenNameToNavigate = 'HomeScreenContent';
-    }
-
-    if (currentNavigation.getParent()) {
-      currentNavigation.getParent().navigate(screenNameToNavigate);
-    } else {
-      console.warn(`Jey: Could not navigate to tab '${screenNameToNavigate}' via parent. Attempting direct navigation within current stack.`);
-      navigation.navigate(screenNameToNavigate);
-    }
+  const handleCheckIn = () => {
+    setCheckInAction(isCheckedIn ? 'out' : 'in');
+    setShowCheckInModal(true);
   };
 
-  const handleCheckIn = async () => {
-    if (isCheckedIn) {
-      handleCheckOut();
-      return;
-    }
-
+  const performCheckIn = async () => {
     try {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { isCheckedIn: true });
       setIsCheckedIn(true);
-      Alert.alert("Success", "You have been checked in for the day.");
+      setShowCheckInModal(false);
     } catch (error) {
       console.error("Jey: Error checking in:", error);
       Alert.alert("Error", "Failed to check in. Please try again.");
     }
   };
 
-  const handleCheckOut = async () => {
-    if (!isCheckedIn) return;
-
+  const performCheckOut = async () => {
     try {
       const db = getFirestore();
       const userRef = doc(db, 'users', userData.uid);
       await updateDoc(userRef, { isCheckedIn: false });
       setIsCheckedIn(false);
-      Alert.alert("Success", "You have been checked out for the day.");
+      setShowCheckInModal(false);
     } catch (error) {
       console.error("Jey: Error checking out:", error);
       Alert.alert("Error", "Failed to check out. Please try again.");
@@ -432,173 +430,308 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-        {/* Jey: Rescue Request Card */}
+        {/* Jey: Moved DriverProfileHeader inside ScrollView */}
+        <DriverProfileHeader userData={userData} />
+
+        {/* Enhanced Rescue Request Card */}
         {rescueRequest && (
-          <View style={styles.rescueCard}>
-            <View style={styles.rescueCardHeader}>
-              <MaterialIcons name="local-hospital" size={24} color={Colors.white} />
-              <Text style={styles.rescueCardTitle}>Rescue Dispatched!</Text>
-            </View>
-            <Text style={styles.rescueMessage}>You have been assigned to rescue {rescueRequest.rescueeName}.</Text>
-            <TouchableOpacity style={styles.addressButton} onPress={() => handleOpenMaps(rescueRequest.rescueAddress)}>
-                <MaterialIcons name="location-on" size={20} color={Colors.darkText} />
-                <Text style={styles.addressText}>{rescueRequest.rescueAddress}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.rescueAcknowledgeButton} onPress={handleAcknowledgeRescue}>
-                <Text style={styles.rescueAcknowledgeButtonText}>Acknowledge & Start</Text>
-            </TouchableOpacity>
+          <View style={styles.modernRescueCard}>
+            <LinearGradient
+              colors={['#E53E3E', '#C53030']}
+              style={styles.rescueCardGradient}
+            >
+              <View style={styles.rescueUrgentBadge}>
+                <Ionicons name="alert-circle" size={18} color={Colors.white} />
+                <Text style={styles.rescueUrgentText}>URGENT</Text>
+              </View>
+              <View style={styles.modernRescueHeader}>
+                <View style={styles.rescueIconContainer}>
+                  <Ionicons name="medkit" size={28} color={Colors.white} />
+                </View>
+                <View style={styles.rescueHeaderText}>
+                  <Text style={styles.modernRescueTitle}>Rescue Mission!</Text>
+                  <Text style={styles.rescueSubtitle}>You've been assigned to help a fellow driver</Text>
+                </View>
+              </View>
+              <View style={styles.rescueDetails}>
+                <View style={styles.rescueDetailItem}>
+                  <Ionicons name="person" size={18} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.rescueDetailText}>Driver: {rescueRequest.rescueeName}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.modernAddressButton} 
+                  onPress={() => handleOpenMaps(rescueRequest.rescueAddress)}
+                >
+                  <Ionicons name="navigate" size={18} color={Colors.safetyBlue} />
+                  <Text style={styles.modernAddressText}>{rescueRequest.rescueAddress}</Text>
+                  <Ionicons name="open-outline" size={16} color={Colors.safetyBlue} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity 
+                style={styles.modernRescueButton} 
+                onPress={handleAcknowledgeRescue}
+              >
+                <LinearGradient
+                  colors={['#38A169', '#2F855A']}
+                  style={styles.rescueButtonGradient}
+                >
+                  <Ionicons name="checkmark-done" size={20} color={Colors.white} />
+                  <Text style={styles.modernRescueButtonText}>Acknowledge & Start Mission</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         )}
 
         {loadingTips ? (
-          <View style={styles.centralCardLoading}>
+          <View style={styles.modernCardLoading}>
             <ActivityIndicator size="large" color={Colors.primaryTeal} />
+            <Text style={styles.loadingText}>Loading your safety tips...</Text>
           </View>
         ) : safetyTips.length > 0 ? (
-          <View style={styles.centralCard}>
-            <ScrollView
-              ref={scrollViewRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScrollBeginDrag={() => clearInterval(autoScrollIntervalRef.current)}
-              onMomentumScrollEnd={handleScrollEnd}
-              scrollEventThrottle={16}
-              contentContainerStyle={styles.swiperContentContainer}
-            >
-              {safetyTips.map((tip, index) => (
-                <LinearGradient
-                  key={tip.id}
-                  colors={[Colors.primaryTeal, Colors.accentSalmon]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.swiperSlide, { width: screenWidth - 40 }]}
-                >
-                  <View style={styles.tipContentWrapper}>
-                    {tip.imageUrl && (
-                      <Image source={{ uri: tip.imageUrl }} style={styles.tipImage} />
-                    )}
-                    <Text style={styles.tipTitle}>{tip.title}</Text>
-                    <Text style={styles.tipMessage}>{tip.message}</Text>
-                  </View>
-                </LinearGradient>
-              ))}
-            </ScrollView>
-            <View style={styles.pagination}>
-              {safetyTips.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.dot,
-                    index === currentTipIndex ? styles.activeDot : null,
-                  ]}
-                />
-              ))}
+          <View style={styles.safetyTipsContainer}>
+            <View style={styles.safetyTipsHeader}>
+              <MaterialIcons name="shield" size={24} color={Colors.safetyBlue} />
+              <Text style={styles.sectionTitle}>Today's Safety Tips</Text>
+              <View style={styles.tipCounter}>
+                <Text style={styles.tipCounterText}>{currentTipIndex + 1}/{safetyTips.length}</Text>
+              </View>
+            </View>
+            <View style={styles.modernCentralCard}>
+              <ScrollView
+                ref={scrollViewRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScrollBeginDrag={() => clearInterval(autoScrollIntervalRef.current)}
+                onMomentumScrollEnd={handleScrollEnd}
+                scrollEventThrottle={16}
+                contentContainerStyle={styles.swiperContentContainer}
+              >
+                {safetyTips.map((tip, index) => (
+                  <LinearGradient
+                    key={tip.id}
+                    colors={['#667eea', '#764ba2']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.modernSwiperSlide, { width: screenWidth - 40 }]}
+                  >
+                    <View style={styles.modernTipContent}>
+                      <View style={styles.tipHeader}>
+                        <MaterialIcons name="lightbulb" size={20} color="rgba(255,255,255,0.9)" />
+                        <Text style={styles.tipBadge}>Safety Tip</Text>
+                      </View>
+                      {tip.imageUrl && (
+                        <Image source={{ uri: tip.imageUrl }} style={styles.modernTipImage} />
+                      )}
+                      <Text style={styles.modernTipTitle}>{tip.title}</Text>
+                      <Text style={styles.modernTipMessage}>{tip.message}</Text>
+                    </View>
+                  </LinearGradient>
+                ))}
+              </ScrollView>
+              <View style={styles.modernPagination}>
+                {safetyTips.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.modernDot,
+                      index === currentTipIndex ? styles.modernActiveDot : null,
+                    ]}
+                  />
+                ))}
+              </View>
             </View>
           </View>
         ) : (
-          <View style={styles.centralCardNoTips}>
-            <Image
-              source={require('../assets/noSafety.png')}
-              style={styles.noSafetyImage}
-            />
-            <Text style={styles.noSafetyText}>No safety tips for today.</Text>
+          <View style={styles.modernNoTipsCard}>
+            <View style={styles.noTipsIconContainer}>
+              <MaterialIcons name="shield" size={40} color={Colors.inactiveGray} />
+            </View>
+            <Text style={styles.noTipsTitle}>All caught up!</Text>
+            <Text style={styles.noTipsMessage}>No new safety tips today. Keep up the great work! 🎉</Text>
           </View>
         )}
 
         {loadingNotices ? (
-          <View style={styles.noticesCardLoading}>
+          <View style={styles.modernCardLoading}>
             <ActivityIndicator size="large" color={Colors.primaryTeal} />
+            <Text style={styles.loadingText}>Loading your notices...</Text>
           </View>
         ) : notices.length > 0 ? (
-          notices.map((notice) => (
-            <View key={notice.id} style={styles.noticeCard}>
-              <View style={styles.noticeHeader}>
-                <Image
-                  source={require('../assets/png/infos.png')}
-                  style={[styles.iconPng, { tintColor: Colors.white }]}
-                />
-                <Text style={styles.noticeTitle}>{notice.title}</Text>
+          <View style={styles.noticesContainer}>
+            <View style={styles.noticesHeader}>
+              <MaterialIcons name="notifications" size={24} color={Colors.warningOrange} />
+              <Text style={styles.sectionTitle}>Important</Text>
+              <View style={styles.noticesBadge}>
+                <Text style={styles.noticesBadgeText}>{notices.length} New</Text>
               </View>
-              <Text style={styles.noticeMessage}>{notice.message}</Text>
             </View>
-          ))
+            {notices.map((notice) => (
+              <View key={notice.id} style={styles.modernNoticeCard}>
+                <LinearGradient
+                  colors={['#FF6B6B', '#FF8E53']}
+                  style={styles.noticeCardGradient}
+                >
+                  <View style={styles.modernNoticeHeader}>
+                    <View style={styles.noticeIconContainer}>
+                      <MaterialIcons name="campaign" size={20} color={Colors.white} />
+                    </View>
+                    <Text style={styles.modernNoticeTitle}>{notice.title}</Text>
+                  </View>
+                  <Text style={styles.modernNoticeMessage}>{notice.message}</Text>
+                  <View style={styles.noticeFooter}>
+                    <MaterialIcons name="schedule" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.noticeTime}>
+                      {notice.createdAt ? new Date(notice.createdAt.toDate()).toLocaleDateString() : 'Today'}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </View>
+            ))}
+          </View>
         ) : (
-          <View style={styles.noticesCardNoNotices}>
-            <Image
-              source={require('../assets/png/infos.png')}
-              style={[styles.iconPng, { tintColor: Colors.inactiveGray }]}
-            />
-            <Text style={styles.noNoticesText}>No new notices from your DSP.</Text>
+          <View style={styles.modernNoNoticesCard}>
+            <View style={styles.noNoticesIconContainer}>
+              <MaterialIcons name="notifications_none" size={40} color={Colors.inactiveGray} />
+            </View>
+            <Text style={styles.noNoticesTitle}>All clear!</Text>
+            <Text style={styles.noNoticesMessage}>No new notices from your company. You're all set! ✅</Text>
           </View>
         )}
 
         {userData?.allowChat && (
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate('GroupChat')}
-            >
-              <Image
-                source={require('../assets/png/users.png')}
-                style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
-              />
-              <Text style={styles.buttonText}>Group Chats</Text>
-              {unreadCounts.group > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCounts.group}</Text>
-                </View>
-              ) : (
-                <Ionicons name="add" size={20} color={Colors.accentSalmon} />
-              )}
-            </TouchableOpacity>
+          <View style={styles.actionSection}>
+            <View style={styles.sectionHeaderSimple}>
+              <MaterialIcons name="forum" size={22} color={Colors.primaryTeal} />
+              <Text style={styles.sectionTitleSimple}>Stay Connected</Text>
+            </View>
+            <View style={styles.modernButtonContainer}>
+              <TouchableOpacity
+                style={styles.modernButton}
+                onPress={() => navigation.navigate('GroupChat')}
+              >
+                <LinearGradient
+                  colors={['#4FC3F7', '#29B6F6']}
+                  style={styles.buttonGradient}
+                >
+                  <View style={styles.buttonContent}>
+                    <View style={styles.buttonIconContainer}>
+                      <MaterialIcons name="groups" size={24} color={Colors.white} />
+                    </View>
+                    <View style={styles.buttonTextContainer}>
+                      <Text style={styles.modernButtonTitle}>Team Chat</Text>
+                      <Text style={styles.modernButtonSubtitle}>Connect with your team</Text>
+                    </View>
+                    {unreadCounts.group > 0 ? (
+                      <View style={styles.modernBadge}>
+                        <Text style={styles.modernBadgeText}>{unreadCounts.group}</Text>
+                      </View>
+                    ) : (
+                      <Image 
+                        source={require('../assets/png/arrow_rightShort.png')} 
+                        style={{ width: 16, height: 16, tintColor: 'rgba(255,255,255,0.8)' }} 
+                      />
+                    )}
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => navigation.navigate('OneChat')}
-            >
-              <Image
-                source={require('../assets/png/user.png')}
-                style={[styles.iconPng, { tintColor: Colors.primaryTeal }]}
-              />
-              <Text style={styles.buttonText}>Direct Messages</Text>
-              {unreadCounts.one > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCounts.one}</Text>
-                </View>
-              ) : (
-                <Ionicons name="add" size={20} color={Colors.accentSalmon} />
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modernButton}
+                onPress={() => navigation.navigate('OneChat')}
+              >
+                <LinearGradient
+                  colors={['#66BB6A', '#4CAF50']}
+                  style={styles.buttonGradient}
+                >
+                  <View style={styles.buttonContent}>
+                    <View style={styles.buttonIconContainer}>
+                      <MaterialIcons name="chat" size={24} color={Colors.white} />
+                    </View>
+                    <View style={styles.buttonTextContainer}>
+                      <Text style={styles.modernButtonTitle}>Direct Messages</Text>
+                      <Text style={styles.modernButtonSubtitle}>Private conversations</Text>
+                    </View>
+                    {unreadCounts.one > 0 ? (
+                      <View style={styles.modernBadge}>
+                        <Text style={styles.modernBadgeText}>{unreadCounts.one}</Text>
+                      </View>
+                    ) : (
+                      <Image 
+                        source={require('../assets/png/arrow_rightShort.png')} 
+                        style={{ width: 16, height: 16, tintColor: 'rgba(255,255,255,0.8)' }} 
+                      />
+                    )}
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.button, styles.importantButton]}
-            onPress={() => navigation.navigate('GateCodes')}
-          >
-            <Image
-              source={require('../assets/png/key.png')}
-              style={[styles.iconPng, { tintColor: Colors.white }]}
-            />
-            <Text style={[styles.buttonText, styles.importantButtonText]}>Gate Codes</Text>
-            <Ionicons name="chevron-forward" size={20} color={Colors.white} />
-          </TouchableOpacity>
+        <View style={styles.actionSection}>
+          <View style={styles.sectionHeaderSimple}>
+            <MaterialIcons name="work" size={22} color={Colors.primaryTeal} />
+            <Text style={styles.sectionTitleSimple}>Quick Actions</Text>
+          </View>
+          <View style={styles.modernButtonContainer}>
+            <TouchableOpacity
+              style={styles.modernButton}
+              onPress={() => navigation.navigate('GateCodes')}
+            >
+              <LinearGradient
+                colors={['#FF7043', '#FF5722']}
+                style={styles.buttonGradient}
+              >
+                <View style={styles.buttonContent}>
+                  <View style={styles.buttonIconContainer}>
+                    <MaterialIcons name="dialpad" size={24} color={Colors.white} />
+                  </View>
+                  <View style={styles.buttonTextContainer}>
+                    <Text style={styles.modernButtonTitle}>Gate Codes</Text>
+                    <Text style={styles.modernButtonSubtitle}>Access your delivery codes</Text>
+                  </View>
+                  <Image 
+                    source={require('../assets/png/arrow_rightShort.png')} 
+                    style={{ width: 16, height: 16, tintColor: 'rgba(255,255,255,0.8)' }} 
+                  />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.button, isCheckedIn ? styles.checkOutButton : styles.checkInButton]}
-            onPress={handleCheckIn}
-          >
-            <Ionicons
-              name={isCheckedIn ? "exit-outline" : "checkmark-circle-outline"}
-              size={24}
-              color={Colors.white}
-            />
-            <Text style={[styles.buttonText, styles.checkInButtonText]}>
-              {isCheckedIn ? 'Check Out' : 'Check In'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modernButton}
+              onPress={handleCheckIn}
+            >
+              <LinearGradient
+                colors={isCheckedIn ? ['#F44336', '#D32F2F'] : ['#4CAF50', '#388E3C']}
+                style={styles.buttonGradient}
+              >
+                <View style={styles.buttonContent}>
+                  <View style={styles.buttonIconContainer}>
+                    <MaterialIcons 
+                      name={isCheckedIn ? "logout" : "login"} 
+                      size={24} 
+                      color={Colors.white} 
+                    />
+                  </View>
+                  <View style={styles.buttonTextContainer}>
+                    <Text style={styles.modernButtonTitle}>
+                      {isCheckedIn ? 'Check Out' : 'Check In'}
+                    </Text>
+                    <Text style={styles.modernButtonSubtitle}>
+                      {isCheckedIn ? 'End your shift safely' : 'Start your shift'}
+                    </Text>
+                  </View>
+                  <Image 
+                    source={require('../assets/png/arrow_rightShort.png')} 
+                    style={{ width: 16, height: 16, tintColor: 'rgba(255,255,255,0.8)' }} 
+                  />
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
       
@@ -611,114 +744,7 @@ const HomeScreen = ({ navigation }) => {
         </TouchableOpacity>
       )}
 
-      <View style={styles.toggleButtonContainer}>
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('HomeTab')}
-        >
-          <Image
-            source={require('../assets/png/home.png')}
-            style={[
-              styles.bottomTabIconPng,
-              { tintColor: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'HomeTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          >
-            Home
-          </Text>
-        </TouchableOpacity>
 
-        {userData?.allowPosts && (
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('PostsTab')}
-          >
-            <Image
-              source={require('../assets/png/post.png')}
-              style={[
-                styles.bottomTabIconPng,
-                { tintColor: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            />
-            <Text
-            style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'PostsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Posts
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {userData?.isDsp && (
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('AdminTab')}
-          >
-            <MaterialIcons
-              name="admin-panel-settings"
-              size={20}
-              color={activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'AdminTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Admin
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {userData?.role === 'company' && (
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={() => handleTabPress('CompanyTab')}
-          >
-            <MaterialIcons
-              name="business"
-              size={20}
-              color={activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray}
-            />
-            <Text
-              style={[
-                styles.toggleButtonText,
-                { color: activeTab === 'CompanyTab' ? Colors.primaryTeal : Colors.inactiveGray }
-              ]}
-            >
-              Company
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => handleTabPress('SettingsTab')}
-        >
-          <Image
-            source={require('../assets/png/settings.png')}
-            style={[
-              styles.bottomTabIconPng,
-              { tintColor: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          />
-          <Text
-            style={[
-              styles.toggleButtonText,
-              { color: activeTab === 'SettingsTab' ? Colors.primaryTeal : Colors.inactiveGray }
-            ]}
-          >
-            Settings
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       <NewChatModal
         visible={modalVisible}
@@ -731,6 +757,95 @@ const HomeScreen = ({ navigation }) => {
         onClose={() => setIsReturnsModalVisible(false)}
         onLogReturns={handleLogRouteCompletion}
       />
+
+      {/* Custom Check In/Out Modal */}
+      <Modal
+        visible={showCheckInModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCheckInModal(false)}
+      >
+        <View style={styles.checkInModalOverlay}>
+          <View style={styles.checkInModalContainer}>
+            <LinearGradient
+              colors={checkInAction === 'in' ? ['#4CAF50', '#388E3C'] : ['#F44336', '#D32F2F']}
+              style={styles.checkInModalGradient}
+            >
+              <View style={styles.checkInModalHeader}>
+                <View style={styles.checkInModalIconContainer}>
+                  <MaterialIcons 
+                    name={checkInAction === 'in' ? "login" : "logout"} 
+                    size={32} 
+                    color={Colors.white} 
+                  />
+                </View>
+                <Text style={styles.checkInModalTitle}>
+                  {checkInAction === 'in' ? 'Check In for Your Shift' : 'Check Out from Your Shift'}
+                </Text>
+                <Text style={styles.checkInModalSubtitle}>
+                  {checkInAction === 'in' 
+                    ? 'Ready to start your delivery day?' 
+                    : 'Finishing up for today?'
+                  }
+                </Text>
+              </View>
+
+              <View style={styles.checkInModalContent}>
+                <View style={styles.checkInModalInfo}>
+                  <MaterialIcons name="schedule" size={20} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.checkInModalTime}>
+                    {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                </View>
+                <View style={styles.checkInModalInfo}>
+                  <MaterialIcons name="today" size={20} color="rgba(255,255,255,0.9)" />
+                  <Text style={styles.checkInModalDate}>
+                    {new Date().toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </Text>
+                </View>
+                {userData?.dspName && (
+                  <View style={styles.checkInModalInfo}>
+                    <MaterialIcons name="business" size={20} color="rgba(255,255,255,0.9)" />
+                    <Text style={styles.checkInModalCompany}>{userData.dspName}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.checkInModalActions}>
+                <TouchableOpacity
+                  style={styles.checkInModalCancelButton}
+                  onPress={() => setShowCheckInModal(false)}
+                >
+                  <Text style={styles.checkInModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.checkInModalConfirmButton}
+                  onPress={checkInAction === 'in' ? performCheckIn : performCheckOut}
+                >
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                    style={styles.checkInModalConfirmGradient}
+                  >
+                    <MaterialIcons 
+                      name="check" 
+                      size={20} 
+                      color={Colors.white} 
+                    />
+                    <Text style={styles.checkInModalConfirmText}>
+                      {checkInAction === 'in' ? 'Check In' : 'Check Out'}
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </LinearGradient>
+          </View>
+        </View>
+      </Modal>
+      <BottomTab />
     </View>
   );
 };
@@ -870,16 +985,20 @@ const HomeWrapper = () => {
         const data = docSnap.data();
         setLocalIsOnDutyOrTrainerStatus(data.isOnDutty || false);
 
-        if (data.isOnDutty) {
+        if (data.isOnDutty && data.onDutySince) {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
           }
+          // Calculate time left until 30 seconds after onDutySince
+          // NOTE: The original code used 32,400,000 ms (9 hours), which is likely a fixed shift duration.
+          let onDutyTime = data.onDutySince.toDate ? data.onDutySince.toDate() : new Date(data.onDutySince);
+          let now = new Date();
+          let msLeft = 32400000 - (now - onDutyTime);
+          if (msLeft < 0) msLeft = 0;
           fixedTimerRef.current = setTimeout(() => {
-            console.log('Jey: 10 minutes have passed. Setting user to off-duty automatically.');
+            console.log('Jey: 30 seconds have passed. Setting user to off-duty automatically.');
             updateIsOnDuttyStatus(false);
-
-//////////////TIME OUT////////////////////////////////////////////////////////////////////////////
-          }, 32400000);
+          }, msLeft);
         } else {
           if (fixedTimerRef.current) {
             clearTimeout(fixedTimerRef.current);
@@ -927,54 +1046,62 @@ const HomeWrapper = () => {
           headerTintColor: Colors.darkText,
           headerTitleAlign: 'center',
           headerBackVisible: true,
+          headerBackTitle: '',
+          headerBackTitleVisible: false,
+          headerBackButtonMenuEnabled: false,
+          ...(Platform.OS === 'ios' && {
+            headerBackTitle: '',
+            headerBackTitleVisible: false,
+            headerBackButtonMenuEnabled: false,
+            headerBackDisplayMode: 'minimal',
+          }),
         }}
       >
         <Stack.Screen
           name="HomeScreenContent"
           component={HomeScreen}
           options={{
-            headerShown: true,
-            header: () => <DriverProfileHeader userData={userData} />,
+            headerShown: false, 
+            header: undefined,
           }}
         />
         <Stack.Screen
           name="GroupChat"
           component={GroupChat}
-          options={{ title: 'Group Chats' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="OneChat"
           component={OneChat}
-          options={{ title: 'Direct Messages' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="GateCodes"
           component={GateCodes}
-          options={{ title: 'Gate Codes' }}
+          options={{
+            header: () => <CustomHeader title="Gate Codes" />, 
+            headerShown: true
+          }}
         />
         <Stack.Screen
           name="Team"
           component={Team}
-          options={{ title: 'Team Management' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="TeamChat"
           component={TeamChat}
-          options={{ title: 'Team Chat' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="GroupConversation"
           component={GroupConversation}
-          options={{
-            headerShown: false,
-          }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="OneConversation"
           component={OneConversation}
-          options={{
-            headerShown: false,
-          }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="ReturnsDetail"
@@ -1005,7 +1132,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.lightBackground,
-    paddingTop: 25,
+    // Removed paddingTop: 25 here since the header is now removed.
     alignItems: 'center',
   },
   scrollViewContent: {
@@ -1013,7 +1140,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 80,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    // Added paddingTop here to match the old header's top spacing plus the padding
+    paddingTop: 0, 
   },
   loadingContainer: {
     flex: 1,
@@ -1042,105 +1170,261 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   driverProfileSection: {
+    width: screenWidth, // Make sure it spans the full width
+    marginHorizontal: -20, // Negative margin to fill the horizontal padding of the ScrollView
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginBottom: 20, // Add spacing before the next section
+  },
+  profileContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    top: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 10,
+  },
+  profileLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  profileRight: {
+    alignItems: 'flex-end',
   },
   avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     marginRight: 15,
     position: 'relative',
   },
   avatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 25,
+    borderRadius: 30,
     backgroundColor: Colors.lightGray,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 3,
+    borderColor: Colors.white,
   },
   avatarPlaceholder: {
-    backgroundColor: Colors.primaryTeal,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: Colors.white,
   },
-  profilePng: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.successGreen,
+    borderWidth: 3,
+    borderColor: Colors.white,
+  },
+  greetingContainer: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
   },
   profileName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.darkText,
-    flex: 1,
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.white,
+    marginBottom: 2,
+  },
+  motivationalText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontStyle: 'italic',
+    marginBottom: 6,
   },
   driverInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  businessOutlinePng: {
-    width: 20,
-    height: 20,
-    marginRight: 8,
-    resizeMode: 'contain',
-  },
   dspName: {
     fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  timeContainer: {
+    alignItems: 'flex-end',
+  },
+  timeText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  dateText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  // Modern Loading Card
+  modernCardLoading: {
+    width: screenWidth - 40,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
     color: Colors.mediumText,
     fontWeight: '500',
   },
-  centralCard: {
+
+  // Safety Tips Section
+  safetyTipsContainer: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  safetyTipsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.darkText,
+    flex: 1,
+    marginLeft: 8,
+  },
+  tipCounter: {
+    backgroundColor: Colors.safetyBlue,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  tipCounterText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+  modernCentralCard: {
     width: screenWidth - 40,
-    height: 180,
-    borderRadius: 15,
-    marginBottom: 30,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    height: 200,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: 'transparent',
-  },
-  centralCardLoading: {
-    width: screenWidth - 40,
-    height: 150,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: Colors.white,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  centralCardNoTips: {
-    width: screenWidth - 40,
-    height: 180,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: Colors.white,
+  modernSwiperSlide: {
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    borderRadius: 16,
     padding: 20,
+  },
+  modernTipContent: {
+    flex: 1,
+    width: '100%',
+  },
+  tipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tipBadge: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modernTipImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  modernTipTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.white,
+    marginBottom: 8,
+    lineHeight: 22,
+  },
+  modernTipMessage: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
+    flex: 1,
+  },
+  modernPagination: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+  },
+  modernDot: {
+    height: 6,
+    width: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    marginHorizontal: 3,
+  },
+  modernActiveDot: {
+    width: 20,
+    backgroundColor: Colors.white,
+  },
+
+  // No Tips Card
+  modernNoTipsCard: {
+    width: screenWidth - 40,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 3,
+  },
+  noTipsIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.lightBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  noTipsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.darkText,
+    marginBottom: 8,
+  },
+  noTipsMessage: {
+    fontSize: 14,
+    color: Colors.mediumText,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   swiperContentContainer: {
   },
@@ -1187,68 +1471,112 @@ const styles = StyleSheet.create({
     bottom: 5,
     alignSelf: 'center',
   },
-  noticesCardLoading: {
-    width: screenWidth - 40,
-    height: 150,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: Colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+  // Notices Section
+  noticesContainer: {
+    width: '100%',
+    marginBottom: 20,
   },
-  noticesCardNoNotices: {
-    width: screenWidth - 40,
-    height: 150,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    backgroundColor: Colors.white,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  noNoticesText: {
-    fontSize: 16,
-    color: Colors.mediumText,
-    textAlign: 'center',
-    fontWeight: '500',
-    marginTop: 10,
-  },
-  noticeCard: {
-    width: screenWidth - 40,
-    backgroundColor: 'orange',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  noticeHeader: {
+  noticesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  noticeTitle: {
+  noticesBadge: {
+    backgroundColor: Colors.warningOrange,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  noticesBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.white,
+  },
+  modernNoticeCard: {
+    width: screenWidth - 40,
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  noticeCardGradient: {
+    padding: 20,
+  },
+  modernNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  noticeIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  modernNoticeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+    flex: 1,
+  },
+  modernNoticeMessage: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  noticeFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  noticeTime: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+    marginLeft: 4,
+  },
+
+  // No Notices Card
+  modernNoNoticesCard: {
+    width: screenWidth - 40,
+    backgroundColor: Colors.cardBackground,
+    borderRadius: 16,
+    padding: 30,
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  noNoticesIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.lightBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  noNoticesTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-    marginLeft: 10,
+    fontWeight: '700',
+    color: Colors.darkText,
+    marginBottom: 8,
   },
-  noticeMessage: {
+  noNoticesMessage: {
     fontSize: 14,
     color: Colors.mediumText,
+    textAlign: 'center',
     lineHeight: 20,
   },
   noticeDivider: {
@@ -1269,56 +1597,80 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '500',
   },
-  buttonContainer: {
+  // Action Sections
+  actionSection: {
     width: '100%',
-    alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 24,
   },
-  button: {
+  sectionHeaderSimple: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.white,
-    paddingVertical: 18,
-    paddingHorizontal: 25,
-    borderRadius: 12,
-    marginVertical: 8,
-    width: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 3,
+    marginBottom: 16,
+    paddingHorizontal: 4,
   },
-  importantButton: {
-    backgroundColor: Colors.accentSalmon,
-  },
-  importantButtonText: {
-    color: Colors.white,
-  },
-  iconPng: {
-    width: 24,
-    height: 24,
-    marginRight: 15,
-    resizeMode: 'contain',
-  },
-  buttonText: {
-    flex: 1,
+  sectionTitleSimple: {
+    fontSize: 18,
+    fontWeight: '700',
     color: Colors.darkText,
-    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modernButtonContainer: {
+    width: '100%',
+  },
+  modernButton: {
+    width: screenWidth - 40,
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonGradient: {
+    padding: 20,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  buttonIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  buttonTextContainer: {
+    flex: 1,
+  },
+  modernButtonTitle: {
     fontSize: 16,
-  },
-  checkInButton: {
-    backgroundColor: Colors.checkInGreen,
-    justifyContent: 'flex-start',
-  },
-  checkOutButton: {
-    backgroundColor: Colors.checkOutRed,
-    justifyContent: 'flex-start',
-  },
-  checkInButtonText: {
+    fontWeight: '700',
     color: Colors.white,
-    marginLeft: 15,
+    marginBottom: 2,
+  },
+  modernButtonSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  modernBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
   },
   startNewChatButtonGradient: {
     width: '90%',
@@ -1340,42 +1692,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 18,
   },
-  toggleButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    width: '100%',
-    backgroundColor: Colors.white,
-    borderRadius: 0,
-    paddingVertical: 10,
-    position: 'absolute',
-    bottom: 0,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-  },
-  toggleButton: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginHorizontal: 0,
-  },
-  bottomTabIconPng: {
-    width: 20,
-    height: 20,
-    resizeMode: 'contain',
-  },
-  toggleButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
+
   pendingTitle: {
     fontSize: 26,
     fontWeight: 'bold',
@@ -1506,61 +1823,237 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  // Jey: Styles for the new rescue card
-  rescueCard: {
+  // Enhanced Rescue Card Styles
+  modernRescueCard: {
     width: screenWidth - 40,
-    backgroundColor: Colors.accentSalmon,
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 30,
+    borderRadius: 16,
+    marginBottom: 20,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  rescueCardHeader: {
+  rescueCardGradient: {
+    padding: 20,
+  },
+  rescueUrgentBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 16,
   },
-  rescueCardTitle: {
+  rescueUrgentText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
+    marginLeft: 4,
+    letterSpacing: 1,
+  },
+  modernRescueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  rescueIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  rescueHeaderText: {
+    flex: 1,
+  },
+  modernRescueTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: Colors.white,
-    marginLeft: 10,
+    marginBottom: 4,
   },
-  rescueMessage: {
+  rescueSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
+  },
+  rescueDetails: {
+    marginBottom: 20,
+  },
+  rescueDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  rescueDetailText: {
     fontSize: 16,
-    color: Colors.white,
-    lineHeight: 24,
-    marginBottom: 15,
+    color: 'rgba(255,255,255,0.9)',
+    marginLeft: 8,
+    fontWeight: '600',
   },
-  addressButton: {
+  modernAddressButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
   },
-  addressText: {
-    marginLeft: 10,
-    fontSize: 16,
+  modernAddressText: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
     color: Colors.darkText,
-    textDecorationLine: 'underline',
+    fontWeight: '600',
   },
-  rescueAcknowledgeButton: {
-    backgroundColor: Colors.checkInGreen,
-    paddingVertical: 15,
-    borderRadius: 10,
+  modernRescueButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  rescueButtonGradient: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
-  rescueAcknowledgeButtonText: {
+  modernRescueButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: Colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
+    marginLeft: 8,
   },
+
+  // Check In/Out Modal Styles
+  checkInModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  checkInModalContainer: {
+    width: screenWidth - 40,
+    maxWidth: 400,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  checkInModalGradient: {
+    padding: 0,
+  },
+  checkInModalHeader: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+  },
+  checkInModalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  checkInModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.white,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  checkInModalSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  checkInModalContent: {
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+  },
+  checkInModalInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 16,
+  },
+  checkInModalTime: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.white,
+    marginLeft: 12,
+  },
+  checkInModalDate: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  checkInModalCompany: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    marginLeft: 12,
+    fontWeight: '600',
+  },
+  checkInModalActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 30,
+    paddingBottom: 30,
+    gap: 12,
+  },
+  checkInModalCancelButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  checkInModalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  checkInModalConfirmButton: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  checkInModalConfirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  checkInModalConfirmText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+    marginLeft: 8,
+  },
+
   dot: {
     height: 8,
     width: 8,

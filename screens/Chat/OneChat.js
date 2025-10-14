@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, query, where, onSnapshot, getDocs, addDoc, getFirestore, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -195,6 +195,15 @@ const StartNewOneChatModal = ({ visible, onClose, navigation, currentUserEmail, 
 
 const OneChat = ({ navigation }) => {
   const { userData } = useAuth();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
+
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newChatModalVisible, setNewChatModalVisible] = useState(false);

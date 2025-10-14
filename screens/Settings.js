@@ -1,37 +1,43 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform, Alert, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-
-// Jey: Import your local image assets
-import profilePlaceholderIcon from '../assets/png/profile.png';
 import cameraIcon from '../assets/png/camera.png';
 import userIcon from '../assets/png/user.png';
 import lockIcon from '../assets/png/lock.png';
 import rate_half from '../assets/png/rate_half.png';
 import logoutIcon from '../assets/png/logout.png';
-
-// Jey: Import the new FeedBack.js component
 import FeedBack from './FeedBack';
 
 const Colors = {
-  primaryTeal: '#007070',
-  accentSalmon: '#FA8072',
-  lightBackground: '#f8f8f8',
+  primaryTeal: '#2E8B57',
+  accentSalmon: '#FF6B6B',
+  checkInGreen: '#4CAF50',
+  lightBackground: '#F8FAFB',
   white: '#FFFFFF',
-  darkText: '#333333',
-  mediumText: '#666666',
-  lightGray: '#ececec',
-  border: '#e0e0e0',
-  redAccent: '#FF5733',
-  inactiveGray: '#A0A0A0',
+  darkText: '#2C3E50',
+  mediumText: '#5A6C7D',
+  lightGray: '#F0F2F5',
+  border: '#E8EAED',
+  inactiveGray: '#9AA0A6',
+  redAccent: '#F44336',
+  cardBackground: '#FFFFFF',
 };
 
 const Settings = () => {
   const { currentUser, userData } = useAuth();
   const navigation = useNavigation();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
 
   const handleLogout = async () => {
     try {
@@ -47,11 +53,32 @@ const Settings = () => {
     }
   };
 
+  // Greeting and motivational message
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+  const getMotivationalMessage = () => {
+    const messages = [
+      'Your settings, your way! ⚙️',
+      'Personalize your experience! 🌟',
+      'Stay secure and in control! 🔒',
+      'We care about your privacy! 🛡️',
+      'Let us know how we can help! 💬'
+    ];
+    return messages[new Date().getDay() % messages.length];
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollViewContent}>
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
+        {/* Profile Section with Gradient and Greeting */}
+        <LinearGradient
+          colors={[Colors.primaryTeal, '#3A9B6C']}
+          style={styles.profileSection}
+        >
           <TouchableOpacity
             style={styles.avatarContainer}
             onPress={() => navigation.navigate('EditProfile')}
@@ -60,38 +87,37 @@ const Settings = () => {
               <Image source={{ uri: userData.profilePictureUrl }} style={styles.avatar} />
             ) : (
               <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <Image source={profilePlaceholderIcon} style={styles.profilePlaceholderImage} />
+                <MaterialIcons name="person" size={40} color={Colors.white} />
               </View>
             )}
             <View style={styles.editAvatarIcon}>
               <Image source={cameraIcon} style={styles.cameraImage} />
             </View>
           </TouchableOpacity>
-          <Text style={styles.name}>{userData?.name || 'User Name'}</Text>
+          <Text style={styles.greetingText}>{getGreeting()},</Text>
+          <Text style={styles.name}>{userData?.name?.split(' ')[0] || 'User'}! 👋</Text>
+          <Text style={styles.motivationalText}>{getMotivationalMessage()}</Text>
           <Text style={styles.email}>{currentUser?.email || 'user@example.com'}</Text>
           <View style={[styles.statusBadge, userData?.activated ? styles.statusActive : styles.statusPending]}>
             <Text style={styles.statusText}>
               {userData?.activated ? 'Active' : 'Pending Activation'}
             </Text>
           </View>
-        </View>
+        </LinearGradient>
 
         {/* General Menu Section */}
         <View style={styles.menu}>
           <Text style={styles.menuSectionTitle}>General</Text>
-
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('EditProfile')}>
             <Image source={userIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Edit Profile</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-          
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ResetPassword')}>
             <Image source={lockIcon} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Privacy & Security</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-          
           <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('FeedBack')}>
             <Image source={rate_half} style={styles.menuItemIcon} />
             <Text style={styles.menuText}>Feedback</Text>
@@ -107,13 +133,11 @@ const Settings = () => {
             <Text style={styles.menuText}>Privacy Policy</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL('https://driverroom.dev/terms')}>
             <Ionicons name="document-text-outline" size={24} color={Colors.primaryTeal} />
             <Text style={styles.menuText}>Terms of Service</Text>
             <Ionicons name="chevron-forward" size={20} color={Colors.mediumText} style={styles.menuArrow} />
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.menuItem} onPress={() => Linking.openURL('https://driverroom.dev/contact')}>
             <Ionicons name="mail-outline" size={24} color={Colors.primaryTeal} />
             <Text style={styles.menuText}>Contact Us</Text>
@@ -142,15 +166,30 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderRadius: 15,
-    padding: 25,
+    borderRadius: 18,
+    padding: 28,
     marginBottom: 30,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowOpacity: 0.10,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  greetingText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 0,
+    letterSpacing: 0.2,
+  },
+  motivationalText: {
+    fontSize: 15,
+    color: '#E0F2F1',
+    marginTop: 2,
+    marginBottom: 8,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   avatarContainer: {
     width: 100,
@@ -171,11 +210,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primaryTeal,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  profilePlaceholderImage: {
-    width: 80,
-    height: 80,
-    tintColor: Colors.white,
   },
   editAvatarIcon: {
     position: 'absolute',

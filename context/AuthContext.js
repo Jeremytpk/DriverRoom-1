@@ -19,6 +19,66 @@ export const AuthProvider = ({ children }) => {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [unreadCounts, setUnreadCounts] = useState({ group: 0, one: 0 });
+  const [demoMode, setDemoMode] = useState(false);
+  // Demo user data for each role
+  const demoUsers = {
+    driver: {
+      uid: 'demo-driver',
+      email: 'driver@demo.com',
+      name: 'Demo Driver',
+      dspName: 'Demo DSP',
+      role: 'driver',
+      activated: true,
+      isOnDutty: true, // Always on-duty in demo mode
+      isAdmin: false,
+      isDsp: false,
+      isTrainer: false,
+      profilePictureUrl: null,
+      bio: 'This is a demo driver.',
+      emailVerified: true,
+    },
+    dsp: {
+      uid: 'demo-dsp',
+      email: 'dsp@demo.com',
+      name: 'Demo DSP',
+      dspName: 'Demo DSP',
+      role: 'dsp',
+      activated: true,
+      isOnDutty: true,
+      isAdmin: false,
+      isDsp: true,
+      isTrainer: false,
+      profilePictureUrl: null,
+      bio: 'This is a demo DSP/company.',
+      emailVerified: true,
+    },
+    admin: {
+      uid: 'demo-admin',
+      email: 'admin@demo.com',
+      name: 'Demo Admin',
+      dspName: 'Demo DSP',
+      role: 'admin',
+      activated: true,
+      isOnDutty: true,
+      isAdmin: true,
+      isDsp: false,
+      isTrainer: false,
+      profilePictureUrl: null,
+      bio: 'This is a demo admin.',
+      emailVerified: true,
+    },
+  };
+
+  // Demo login function with role
+  const loginAsDemo = async (role = 'driver') => {
+    setLoading(true);
+    setDemoMode(true);
+    const userData = demoUsers[role] || demoUsers.driver;
+    setCurrentUser({ uid: userData.uid, email: userData.email });
+    setUserData(userData);
+    setLoading(false);
+    return { user: { uid: userData.uid, email: userData.email }, userData };
+  };
 
   const db = getFirestore();
 
@@ -37,7 +97,7 @@ export const AuthProvider = ({ children }) => {
       }
       return null;
     } catch (error) {
-      console.error("Jey: Error fetching user data:", error);
+      console.error('Error fetching user data:', error);
       return null;
     }
   };
@@ -122,12 +182,13 @@ export const AuthProvider = ({ children }) => {
 
     const unsubscribeGroupChats = onSnapshot(groupChatsQuery, async (groupChatsSnapshot) => {
       let totalUnreadGroup = 0;
-      const chatProcessingPromises = groupChatsSnapshot.docs.map(async (chatDoc) => {
+      
+      for (const chatDoc of groupChatsSnapshot.docs) {
         const chatData = chatDoc.data();
         const chatId = chatDoc.id;
         const lastMessageTimestamp = chatData.lastMessage?.createdAt?.toDate();
 
-        if (!lastMessageTimestamp) return;
+        if (!lastMessageTimestamp) continue;
 
         const userChatDocRef = doc(db, 'userChats', userData.uid, 'chats', chatId);
         const userChatSnap = await getDoc(userChatDocRef);
@@ -137,22 +198,20 @@ export const AuthProvider = ({ children }) => {
         if ((!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp) && chatData.lastMessage.sender !== userData.email) {
           totalUnreadGroup += 1;
         }
-      });
+      }
 
-      await Promise.all(chatProcessingPromises);
       setUnreadCounts(prev => ({ ...prev, group: totalUnreadGroup }));
-    }, (error) => {
-      console.error("Jey: Error listening to group chats:", error);
     });
 
     const unsubscribeOneChats = onSnapshot(oneChatsQuery, async (oneChatsSnapshot) => {
       let totalUnreadOne = 0;
-      const chatProcessingPromises = oneChatsSnapshot.docs.map(async (chatDoc) => {
+      
+      for (const chatDoc of oneChatsSnapshot.docs) {
         const chatData = chatDoc.data();
         const chatId = chatDoc.id;
         const lastMessageTimestamp = chatData.lastMessage?.createdAt?.toDate();
 
-        if (!lastMessageTimestamp) return;
+        if (!lastMessageTimestamp) continue;
 
         const userChatDocRef = doc(db, 'userChats', userData.uid, 'chats', chatId);
         const userChatSnap = await getDoc(userChatDocRef);
@@ -162,12 +221,9 @@ export const AuthProvider = ({ children }) => {
         if ((!lastReadTimestamp || lastMessageTimestamp > lastReadTimestamp) && chatData.lastMessage.sender !== userData.email) {
           totalUnreadOne += 1;
         }
-      });
+      }
 
-      await Promise.all(chatProcessingPromises);
       setUnreadCounts(prev => ({ ...prev, one: totalUnreadOne }));
-    }, (error) => {
-      console.error("Jey: Error listening to one-to-one chats:", error);
     });
 
     return () => {
@@ -185,7 +241,10 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateUserProfile,
     unreadCounts,
-    setUserData
+    setUserData,
+    demoMode,
+    loginAsDemo,
+    setDemoMode
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

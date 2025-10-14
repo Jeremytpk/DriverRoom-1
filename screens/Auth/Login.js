@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
+import { Modal } from 'react-native';
 import {
   View,
   Text,
@@ -25,8 +26,50 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   // Jey: Added new state for password visibility
   const [isPasswordVisible, setIsPasswordVisible] = useState(false); 
-  const { login } = useAuth();
+  const { login, loginAsDemo } = useAuth();
+  const [demoModalVisible, setDemoModalVisible] = useState(false);
+  const [selectedDemoRole, setSelectedDemoRole] = useState(null);
+  // Show modal to select demo role
+  const handleDemoLogin = () => {
+    setDemoModalVisible(true);
+  };
+
+  // Handle actual demo login after role selection
+  const handleDemoRoleSelect = async (role) => {
+    setDemoModalVisible(false);
+    setLoading(true);
+    try {
+      const { userData } = await loginAsDemo(role);
+      if (role === 'admin' || userData?.isAdmin) {
+        navigation.navigate('AdminScreen');
+      } else if (role === 'dsp' || userData?.isDsp) {
+        navigation.navigate('CompanyScreen');
+      } else if (role === 'driver' || userData?.role === 'driver') {
+        if (userData?.activated && userData?.isOnDutty) {
+          navigation.navigate('Home');
+        } else if (userData?.activated && !userData?.isOnDutty) {
+          navigation.navigate('OffDutty');
+        } else {
+          navigation.navigate('PendingApproval');
+        }
+      } else {
+        navigation.navigate('PendingApproval');
+      }
+    } catch (error) {
+      Alert.alert('Demo Login Error', 'Failed to enter demo mode.');
+    } finally {
+      setLoading(false);
+    }
+  };
   const navigation = useNavigation();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
 
   const handleLogin = async () => {
     // ... (rest of the handleLogin function is unchanged)
@@ -175,6 +218,8 @@ const Login = () => {
                 <Text style={styles.loginButtonText}>Login</Text>
               )}
             </TouchableOpacity>
+
+
           </View>
 
           <View style={styles.footer}>
@@ -190,7 +235,73 @@ const Login = () => {
 };
 
 const styles = StyleSheet.create({
-  // ... (safeArea, container, scrollContent, header, logo, title, subtitle, formContainer are unchanged)
+  // ...existing code...
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 28,
+    alignItems: 'center',
+    width: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 18,
+    color: '#333',
+  },
+  modalButton: {
+    backgroundColor: '#FFD580',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    marginVertical: 6,
+    width: 200,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#333',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  modalCancelButton: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    backgroundColor: '#eee',
+    width: 200,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    color: '#888',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  demoButton: {
+    height: 50,
+    backgroundColor: '#FFD580',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 15,
+    marginBottom: 5,
+  },
+  demoButtonText: {
+    color: '#333',
+    fontWeight: '700',
+    fontSize: 17,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',

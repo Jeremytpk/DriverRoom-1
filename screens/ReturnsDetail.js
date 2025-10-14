@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, FlatList,
-  Alert, TouchableOpacity, ScrollView
+  Alert, TouchableOpacity, ScrollView, Image
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -176,7 +176,7 @@ const ReturnsDetail = () => {
     <View style={returnsDetailStyles.container}>
       <View style={returnsDetailStyles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={28} color="#666" />
+          <Image source={require('../assets/png/arrow_rightShort.png')} style={{ width: 28, height: 28, resizeMode: 'contain', transform: [{ scaleX: -1 }], tintColor: '#000' }} />
         </TouchableOpacity>
         <Text style={returnsDetailStyles.headerTitle}>Return Details for {driver?.name}</Text>
         <View style={{ width: 28 }} />

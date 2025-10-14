@@ -31,8 +31,31 @@ if (Platform.OS === 'web') {
   });
 }
 
-// Other services can be initialized as before
+// Initialize Firestore with offline persistence
 const db = getFirestore(app);
+
+// Enable offline persistence for Firestore
+import { enableNetwork, disableNetwork } from 'firebase/firestore';
+
+// Function to handle network connectivity
+const enableFirestoreNetwork = async () => {
+  try {
+    await enableNetwork(db);
+    console.log('Jey: Firestore network enabled');
+  } catch (error) {
+    console.log('Jey: Error enabling Firestore network:', error);
+  }
+};
+
+const disableFirestoreNetwork = async () => {
+  try {
+    await disableNetwork(db);
+    console.log('Jey: Firestore network disabled');
+  } catch (error) {
+    console.log('Jey: Error disabling Firestore network:', error);
+  }
+};
+
 const storage = getStorage(app);
 
-export { auth, db, storage };
+export { auth, db, storage, enableFirestoreNetwork, disableFirestoreNetwork };

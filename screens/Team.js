@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, ScrollView,
@@ -33,6 +33,9 @@ const Team = () => {
   const { userData, setUserData } = useAuth();
   const navigation = useNavigation();
   const db = getFirestore();
+
+
+
   const [trainers, setTrainers] = useState([]);
   const [trainees, setTrainees] = useState([]);
   const [loading, setLoading] = useState(true);

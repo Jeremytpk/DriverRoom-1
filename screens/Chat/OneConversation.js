@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, FlatList, Image, SafeAreaView,
   Alert, ActivityIndicator, Modal, Dimensions, PanResponder, ScrollView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import CustomHeader from '../../components/CustomHeader';
 import {
   collection, doc, addDoc, serverTimestamp, onSnapshot,
   orderBy, query, updateDoc, setDoc
@@ -27,6 +28,14 @@ const OneConversation = ({ route }) => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const flatListRef = useRef(null);
   const navigation = useNavigation();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
 
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
   const [currentImageUri, setCurrentImageUri] = useState(null);
@@ -230,31 +239,7 @@ const OneConversation = ({ route }) => {
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
-      <SafeAreaView style={styles.headerSafeArea}>
-        <View style={styles.headerContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
-            <Ionicons name="arrow-back" size={28} color="#333" />
-          </TouchableOpacity>
-
-          <View style={styles.headerCenter}>
-            {/* Jey: Use the 'userName' prop directly for the header */}
-            <Text style={styles.participantNameHeader} numberOfLines={1}>
-              {userName || otherParticipantEmail || 'Direct Message'}
-            </Text>
-          </View>
-
-          <View style={styles.headerRight}>
-            {/* Jey: For the photo, you might need to fetch the other participant's full user data if you want their profile picture here.
-                     For now, we'll keep the placeholder or rely on otherParticipant having a profilePictureUrl if passed.
-                     Since you're passing `userName` and `otherParticipantEmail`, `otherParticipant` object isn't fully available here unless you fetch it.
-                     Let's use a placeholder if `otherParticipant` isn't fully passed.
-            */}
-            <View style={styles.participantPhotoPlaceholder}>
-              <Ionicons name="person" size={24} color="#fff" />
-            </View>
-          </View>
-        </View>
-      </SafeAreaView>
+      <CustomHeader />
 
 
       <FlatList
@@ -339,16 +324,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingTop: Platform.OS === 'android' ? 25 : 0,
   },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 60,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
+  // headerContainer: removed (no in-component header)
   headerLeft: {
     position: 'absolute',
     left: 15,

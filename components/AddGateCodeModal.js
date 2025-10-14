@@ -15,12 +15,13 @@ import {
   ScrollView,
   FlatList,
   TouchableWithoutFeedback, 
-  Keyboard
+  Keyboard,
+  Linking
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { db, storage } from '../firebase';
+import { db, storage, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { v4 as uuidv4 } from 'uuid';
 import { Ionicons } from '@expo/vector-icons';
 import CryptoJS from 'crypto-js';
@@ -52,8 +53,59 @@ const AddGateCodeModal = ({
   const codeInputRef = useRef(null);
   const notesInputRef = useRef(null); // Jey: It's good practice to have a ref for all inputs
 
+  // Test Firebase Storage access
+  const testStorageAccess = async () => {
+    try {
+      console.log('🧪 Testing Firebase Storage access...');
+      console.log('🧪 Storage instance:', {
+        bucket: storage._location?.bucket,
+        app: storage.app?.name
+      });
+      
+      const currentUser = auth.currentUser;
+      console.log('🧪 Current user:', currentUser ? {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        emailVerified: currentUser.emailVerified
+      } : 'No user');
+      
+      if (!currentUser) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // Test creating a reference (this doesn't require permissions)
+      const testRef = ref(storage, 'test-connection');
+      console.log('🧪 Test reference created successfully');
+      
+      // Try to create a simple test upload to check permissions
+      try {
+        console.log('🧪 Testing write permissions...');
+        const testData = new Blob(['test'], { type: 'text/plain' });
+        const testUploadRef = ref(storage, `gate_photos/test_${Date.now()}.txt`);
+        
+        // Don't actually upload, just check if we can create the reference
+        console.log('🧪 Write test reference created for path:', testUploadRef.fullPath);
+      } catch (permError) {
+        console.warn('🧪 Write permission test failed (this might be normal):', permError);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('🧪 Storage access test failed:', error);
+      throw error;
+    }
+  };
+
+  // Debug imageUri changes
+  useEffect(() => {
+    console.log('📷 ImageUri changed:', imageUri);
+  }, [imageUri]);
+
   useEffect(() => {
     if (visible) {
+      // Test storage access when modal opens
+      testStorageAccess();
+      
       if (!isAdmin) {
         setSelectedDspId(userDspId || '');
         setSelectedDspName(currentDspName || 'N/A');
@@ -86,87 +138,309 @@ const AddGateCodeModal = ({
   }, [dspSearchQuery, dsps]);
 
   const requestPermissions = async () => {
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please grant media library access to pick an image.');
-        return false;
+    try {
+      console.log('📷 Requesting image picker permissions...');
+      
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        console.log('📷 Permission status:', status);
+        
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Required', 
+            'Please grant media library access to pick an image.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Open Settings', 
+                onPress: () => {
+                  // On iOS, this will open app settings
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  }
+                }
+              }
+            ]
+          );
+          return false;
+        }
+        return true;
       }
       return true;
+    } catch (error) {
+      console.error('📷 Permission request failed:', error);
+      Alert.alert('Error', 'Failed to request permissions. Please try again.');
+      return false;
     }
-    return true;
   };
 
   const pickImage = async () => {
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
+    try {
+      console.log('📷 Starting image picker...');
+      
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) {
+        console.log('📷 Permission denied');
+        return;
+      }
 
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.5,
-    });
+      console.log('📷 Launching image picker...');
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8, // Higher quality for better image
+        allowsMultipleSelection: false,
+      });
 
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      console.log('📷 Image picker result:', {
+        canceled: result.canceled,
+        hasAssets: result.assets?.length > 0
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        console.log('📷 Selected image:', {
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          fileSize: asset.fileSize
+        });
+        
+        console.log('📷 About to set imageUri to:', asset.uri);
+        setImageUri(prevUri => {
+          console.log('📷 Previous imageUri:', prevUri);
+          console.log('📷 New imageUri:', asset.uri);
+          return asset.uri;
+        });
+      } else {
+        console.log('📷 Image picker was canceled');
+      }
+    } catch (error) {
+      console.error('📷 Image picker error:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     }
   };
 
   const uploadImage = async (uri) => {
-    if (!uri) return null;
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const filename = `gate_photos/${uuidv4()}.jpg`;
-    const imageRef = ref(storage, filename);
-    await uploadBytes(imageRef, blob);
-    const downloadURL = await getDownloadURL(imageRef);
-    return downloadURL;
+    if (!uri) {
+      console.log('📁 No image URI provided');
+      return null;
+    }
+
+    try {
+      console.log('📤 Starting image upload process...');
+      console.log('📤 Image URI:', uri);
+      
+      // Test storage access first
+      await testStorageAccess();
+
+      // Fetch the image
+      console.log('📤 Fetching image data...');
+      const response = await fetch(uri);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
+      console.log('📤 Blob created, size:', blob.size, 'bytes');
+      console.log('📤 Blob type:', blob.type);
+
+      // Generate unique filename
+      const timestamp = Date.now();
+      const randomId = uuidv4();
+      const filename = `gate_photos/${timestamp}_${randomId}.jpg`;
+      
+      console.log('📤 Upload filename:', filename);
+
+      // Create storage reference
+      const imageRef = ref(storage, filename);
+      console.log('📤 Storage reference created');
+
+      // Test storage connectivity and authentication
+      try {
+        console.log('📤 Testing storage access...');
+        console.log('📤 Storage bucket:', storage._location?.bucket);
+        console.log('📤 Storage app:', storage.app.name);
+        
+        // Check current user authentication
+        const currentUser = auth.currentUser;
+        console.log('📤 Current user:', currentUser ? currentUser.uid : 'No user');
+        console.log('📤 User email:', currentUser ? currentUser.email : 'No email');
+        
+        if (!currentUser) {
+          throw new Error('User not authenticated. Please log in again.');
+        }
+        
+        // Test a simple storage operation first
+        console.log('📤 Testing storage list operation...');
+        const testRef = ref(storage, 'gate_photos/');
+        
+      } catch (storageError) {
+        console.error('📤 Storage connectivity issue:', storageError);
+        throw new Error(`Storage access failed: ${storageError.message}`);
+      }
+
+      // Upload with resumable upload for better error handling
+      console.log('📤 Starting upload...');
+      
+      const uploadMetadata = {
+        contentType: 'image/jpeg',
+        customMetadata: {
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: 'AddGateCodeModal',
+          userId: auth.currentUser?.uid || 'unknown'
+        }
+      };
+      
+      console.log('📤 Upload metadata:', uploadMetadata);
+      
+      const uploadTask = uploadBytesResumable(imageRef, blob, uploadMetadata);
+
+      return new Promise((resolve, reject) => {
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log('📤 Upload progress:', progress.toFixed(2) + '%');
+          },
+          (error) => {
+            console.error('📤 Upload failed:', error);
+            console.error('📤 Error code:', error.code);
+            console.error('📤 Error message:', error.message);
+            console.error('📤 Error details:', error.serverResponse);
+            reject(error);
+          },
+          async () => {
+            try {
+              console.log('📤 Upload completed, getting download URL...');
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              console.log('✅ Download URL obtained:', downloadURL);
+              resolve(downloadURL);
+            } catch (urlError) {
+              console.error('📤 Failed to get download URL:', urlError);
+              reject(urlError);
+            }
+          }
+        );
+      });
+
+    } catch (error) {
+      console.error('📤 Image upload error:', error);
+      console.error('📤 Error name:', error.name);
+      console.error('📤 Error message:', error.message);
+      console.error('📤 Error stack:', error.stack);
+      throw error;
+    }
   };
 
   const handleSave = async () => {
+    console.log('💾 Starting save process...');
     setLoading(true);
-    const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
-    const dspToSaveId = isAdmin ? selectedDspId : userDspId;
-    if (!location || !code) {
-      Alert.alert('Missing Information', 'Please enter both Location/Complex Name and Gate Code.');
-      setLoading(false);
-      return;
-    }
-    if (isAdmin && !selectedDspId) {
-      Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
-      setLoading(false);
-      return;
-    }
-    if (!dspToSaveId || !dspToSaveName) {
-      Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
-      setLoading(false);
-      return;
-    }
+    
+    try {
+      const dspToSaveName = isAdmin ? selectedDspName : currentDspName;
+      const dspToSaveId = isAdmin ? selectedDspId : userDspId;
+      
+      // Validation
+      if (!location || !code) {
+        Alert.alert('Missing Information', 'Please enter both Location/Complex Name and Gate Code.');
+        setLoading(false);
+        return;
+      }
+      
+      if (isAdmin && !selectedDspId) {
+        Alert.alert('Missing Information', 'Please select a DSP for this gate code.');
+        setLoading(false);
+        return;
+      }
+      
+      if (!dspToSaveId || !dspToSaveName) {
+        Alert.alert('Error', 'Could not determine DSP to associate the gate code with. Please try again or contact support.');
+        setLoading(false);
+        return;
+      }
 
-    let imageUrl = null;
-    if (imageUri) {
+      console.log('💾 Validation passed, processing data...');
+
+      // Upload image if present
+      let imageUrl = null;
+      if (imageUri) {
+        try {
+          console.log('💾 Uploading image...');
+          
+          // First, verify user is still authenticated
+          const currentUser = auth.currentUser;
+          if (!currentUser) {
+            throw new Error('Authentication expired. Please log in again.');
+          }
+          
+          imageUrl = await uploadImage(imageUri);
+          console.log('💾 Image uploaded successfully:', imageUrl);
+        } catch (uploadError) {
+          console.error("💾 Image upload failed:", uploadError);
+          
+          // Show more specific error message
+          let errorMessage = "Failed to upload image. ";
+          let shouldRetry = false;
+          
+          if (uploadError.code === 'storage/unauthorized') {
+            errorMessage += "You don't have permission to upload files. Please check your account permissions.";
+          } else if (uploadError.code === 'storage/canceled') {
+            errorMessage += "Upload was canceled.";
+          } else if (uploadError.code === 'storage/unknown') {
+            errorMessage += "An unknown server error occurred. This might be due to Firebase Storage rules or network issues.";
+            shouldRetry = true;
+          } else if (uploadError.message?.includes('Authentication expired')) {
+            errorMessage += "Please log out and log back in to refresh your authentication.";
+          } else if (uploadError.message?.includes('Storage access failed')) {
+            errorMessage += uploadError.message;
+          } else {
+            errorMessage += "Please check your network connection and try again.";
+            shouldRetry = true;
+          }
+          
+          console.log('💾 Upload error details:', {
+            code: uploadError.code,
+            message: uploadError.message,
+            name: uploadError.name
+          });
+          
+          Alert.alert(
+            "Upload Error", 
+            errorMessage,
+            shouldRetry ? [
+              { text: "Cancel", style: "cancel" },
+              { 
+                text: "Retry", 
+                onPress: () => {
+                  // Retry the save operation
+                  handleSave();
+                  return;
+                }
+              }
+            ] : [{ text: "OK" }]
+          );
+          setLoading(false);
+          return; 
+        }
+      }
+
+      // Encrypt gate code
+      let encryptedCode = null;
       try {
-        imageUrl = await uploadImage(imageUri);
-      } catch (e) {
-        console.error("Jey: Image upload failed:", e);
-        Alert.alert("Upload Error", "Failed to upload image. Please check your network and try again.");
+        console.log('💾 Encrypting gate code...');
+        encryptedCode = CryptoJS.AES.encrypt(code, ENCRYPTION_KEY).toString();
+        console.log('💾 Gate code encrypted successfully');
+      } catch (encryptError) {
+        console.error("💾 Encryption failed:", encryptError);
+        Alert.alert("Encryption Error", "Failed to encrypt gate code. Please ensure the key is correct and the `react-native-get-random-values` library is installed.");
         setLoading(false);
         return; 
       }
-    }
 
-    let encryptedCode = null;
-    try {
-      encryptedCode = CryptoJS.AES.encrypt(code, ENCRYPTION_KEY).toString();
-    } catch (e) {
-      console.error("Jey: Encryption failed:", e);
-      Alert.alert("Encryption Error", "Failed to encrypt gate code. Please ensure the key is correct and the `react-native-get-random-values` library is installed.");
-      setLoading(false);
-      return; 
-    }
-
-    try {
+      // Save to Firestore
+      console.log('💾 Saving to Firestore...');
       await addDoc(collection(db, 'gateCodes'), {
         location: location,
         encryptedCode: encryptedCode,
@@ -177,10 +451,21 @@ const AddGateCodeModal = ({
         companyId: dspToSaveId,
       });
 
+      console.log('💾 Gate code saved successfully!');
       Alert.alert('Success', 'Gate code added successfully!');
+      
+      // Reset form
+      setLocation('');
+      setCode('');
+      setNotes('');
+      setImageUri(null);
+      setSelectedDspId('');
+      setSelectedDspName('');
+      
       onSave();
-    } catch (e) {
-      console.error("Jey: Firestore save failed:", e);
+      
+    } catch (error) {
+      console.error("💾 Save process failed:", error);
       Alert.alert('Error', 'Failed to add gate code. Please check your Firebase permissions and network connection.');
     } finally {
       setLoading(false);
@@ -205,6 +490,17 @@ const AddGateCodeModal = ({
   );
 
   const handleClose = () => {
+    console.log('📷 Closing modal and resetting form');
+    
+    // Reset all form fields
+    setLocation('');
+    setCode('');
+    setNotes('');
+    setImageUri(null);
+    setSelectedDspId('');
+    setSelectedDspName('');
+    setIsDspPickerVisible(false);
+    
     onClose();
   };
 
@@ -215,92 +511,139 @@ const AddGateCodeModal = ({
       visible={visible}
       onRequestClose={handleClose}
     >
-      {/* Jey: This is the key change. Wrap the entire modal view with the touchable. */}
       <TouchableWithoutFeedback onPress={handleClose}>
         <View style={styles.centeredView}>
-          {/* Jey: Add an inner touchable with an empty onPress to prevent closing when clicking inside the modal content. */}
           <TouchableWithoutFeedback onPress={() => {}}>
-            <ScrollView contentContainerStyle={styles.modalView}>
-              <Text style={styles.modalTitle}>Add New Gate Code</Text>
-              
-              {isAdmin ? (
-                <View style={styles.dspSelectionContainer}>
-                  <Text style={styles.dspSelectionLabel}>Assign to DSP:</Text>
-                  <TouchableOpacity
-                    style={styles.dspSelectButton}
-                    onPress={() => setIsDspPickerVisible(true)}
-                  >
-                    <Text style={styles.dspSelectButtonText}>
-                      {selectedDspName || 'Select a DSP'}
-                    </Text>
-                    <Ionicons name="chevron-down" size={20} color="#333" />
-                  </TouchableOpacity>
+            <View style={styles.modalView}>
+              <ScrollView
+                contentContainerStyle={{ paddingBottom: 12 }}
+                style={{ flexGrow: 1, alignSelf: 'stretch', width: '100%' }}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.titleContainer}>
+                  <View style={styles.titleIconContainer}>
+                    <Ionicons name="key" size={24} color="#6366F1" />
+                  </View>
+                  <Text style={styles.modalTitle}>Add New Gate Code</Text>
+                  <Text style={styles.modalSubtitle}>Add gate access information to your system</Text>
                 </View>
-              ) : (
-                <View style={styles.assignedDspTextContainer}>
-                  <Text style={styles.assignedDspLabel}>Assigned to:</Text>
-                  <Text style={styles.assignedDspName}>{currentDspName}</Text>
-                </View>
-              )}
-
-              <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
-                {imageUri ? (
-                  <Image source={{ uri: imageUri }} style={styles.selectedImage} />
+                {isAdmin ? (
+                  <View style={styles.dspSelectionContainer}>
+                    <Text style={styles.dspSelectionLabel}>Assign to DSP:</Text>
+                    <TouchableOpacity
+                      style={styles.dspSelectButton}
+                      onPress={() => setIsDspPickerVisible(true)}
+                    >
+                      <Text style={styles.dspSelectButtonText}>
+                        {selectedDspName || 'Select a DSP'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#333" />
+                    </TouchableOpacity>
+                  </View>
                 ) : (
-                  <>
-                    <Image source={require('../assets/gate.png')} style={styles.defaultImage} />
-                    <Text style={styles.imagePickerText}>Tap to Add Photo (Optional)</Text>
-                  </>
+                  <View style={styles.assignedDspTextContainer}>
+                    <Text style={styles.assignedDspLabel}>Assigned to:</Text>
+                    <Text style={styles.assignedDspName}>{currentDspName}</Text>
+                  </View>
                 )}
-              </TouchableOpacity>
-
-              <TextInput
-                ref={locationInputRef} 
-                style={styles.input}
-                placeholder="Location/Complex Name *"
-                value={location}
-                onChangeText={setLocation}
-                placeholderTextColor="#999"
-                autoFocus={Platform.OS === 'web'}
-              />
-              <TextInput
-                ref={codeInputRef} 
-                style={styles.input}
-                placeholder="Gate Code *"
-                value={code}
-                onChangeText={setCode}
-                placeholderTextColor="#999"
-              />
-              <TextInput
-                ref={notesInputRef}
-                style={[styles.input, styles.notesInput]}
-                placeholder="Notes (Optional)"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={4}
-                placeholderTextColor="#999"
-              />
-
+                {/* Photo Section */}
+                <View style={styles.photoSection}>
+                  <Text style={styles.photoSectionLabel}>Gate Photo (Optional)</Text>
+                  {imageUri ? (
+                    <View style={styles.photoPreviewContainer}>
+                      <View style={styles.photoPreview}>
+                        <Image 
+                          source={{ uri: imageUri }} 
+                          style={styles.previewImage}
+                          resizeMode="cover"
+                          onLoad={() => console.log('📷 Preview image loaded successfully')}
+                          onError={(error) => {
+                            console.log('📷 Preview image failed to load:', error.nativeEvent?.error);
+                            console.log('📷 Failed URI was:', imageUri);
+                          }}
+                        />
+                      </View>
+                      <View style={styles.photoActions}>
+                        <TouchableOpacity 
+                          style={styles.changePhotoButton}
+                          onPress={pickImage}
+                          accessibilityLabel="Change Photo"
+                        >
+                          <Ionicons name="camera-outline" size={16} color="#6366F1" />
+                          <Text style={styles.changePhotoText}>Change Photo</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.removePhotoButton}
+                          onPress={() => {
+                            console.log('📷 Removing selected image');
+                            setImageUri(null);
+                          }}
+                          accessibilityLabel="Remove Photo"
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                          <Text style={styles.removePhotoText}>Remove</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.addPhotoButton} onPress={pickImage}>
+                      <Ionicons name="camera-outline" size={20} color="#6366F1" />
+                      <Text style={styles.addPhotoText}>Add Photo</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TextInput
+                  ref={locationInputRef} 
+                  style={styles.input}
+                  placeholder="Location/Complex Name *"
+                  value={location}
+                  onChangeText={setLocation}
+                  placeholderTextColor="#999"
+                  autoFocus={Platform.OS === 'web'}
+                />
+                <TextInput
+                  ref={codeInputRef} 
+                  style={styles.input}
+                  placeholder="Gate Code *"
+                  value={code}
+                  onChangeText={setCode}
+                  placeholderTextColor="#999"
+                />
+                <TextInput
+                  ref={notesInputRef}
+                  style={[styles.input, styles.notesInput]}
+                  placeholder="Notes (Optional)"
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={4}
+                  placeholderTextColor="#999"
+                />
+              </ScrollView>
               <View style={styles.buttonContainer}>
                 <TouchableOpacity style={styles.cancelButton} onPress={handleClose}>
-                  <Text style={styles.buttonText}>Cancel</Text>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.saveButton}
+                  style={[styles.saveButton, loading && styles.saveButtonDisabled]}
                   onPress={handleSave}
                   disabled={loading}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#fff" />
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator color="#fff" size="small" />
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Saving...</Text>
+                    </View>
                   ) : (
-                    <Text style={styles.buttonText}>Save Gate Code</Text>
+                    <View style={styles.saveButtonContent}>
+                      <Ionicons name="checkmark-circle" size={20} color="white" />
+                      <Text style={[styles.buttonText, { marginLeft: 8 }]}>Save Gate Code</Text>
+                    </View>
                   )}
                 </TouchableOpacity>
               </View>
-            </ScrollView>
+            </View>
           </TouchableWithoutFeedback>
-
           <Modal
             animationType="slide"
             transparent={true}
@@ -355,111 +698,234 @@ const styles = StyleSheet.create({
     margin: 20,
     top: 0,
     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 24,
+    padding: 30,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    width: '90%',
-    maxWidth: Platform.OS === 'web' ? 500 : '90%',
-    maxHeight: '85%',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    width: '92%',
+    maxWidth: Platform.OS === 'web' ? 520 : '92%',
+    maxHeight: '88%',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    flexShrink: 1,
+    flexGrow: 0,
+    alignSelf: 'center',
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#FF9AA2',
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#2E3A59',
+    textAlign: 'center',
   },
-  imagePickerButton: {
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#64748B',
+    marginBottom: 28,
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+  photoSection: {
     width: '100%',
-    height: 150,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    marginBottom: 24,
   },
-  selectedImage: {
+  photoSectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  addPhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAFBFC',
+    borderWidth: 2,
+    borderColor: '#6366F1',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    padding: 20,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        ':hover': {
+          backgroundColor: '#EEF2FF',
+          borderColor: '#4F46E5',
+        },
+      },
+    }),
+  },
+  addPhotoText: {
+    color: '#6366F1',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  photoPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FAFBFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    minHeight: 104, // Ensure consistent height
+  },
+  photoPreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginRight: 16,
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    flexShrink: 0, // Prevent shrinking
+  },
+  previewImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
-  defaultImage: {
-    width: 200,
-    height: 80,
-    resizeMode: 'contain',
-    tintColor: '#a0a0a0',
+  photoActions: {
+    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 8,
   },
-  imagePickerText: {
-    position: 'absolute',
-    bottom: 10,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#333',
+  changePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        ':hover': {
+          backgroundColor: '#DDD6FE',
+          borderColor: '#A5B4FC',
+        },
+      },
+    }),
+  },
+  changePhotoText: {
+    color: '#6366F1',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  removePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        ':hover': {
+          backgroundColor: '#FECACA',
+          borderColor: '#F87171',
+        },
+      },
+    }),
+  },
+  removePhotoText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   input: {
     width: '100%',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
     fontSize: 16,
-    color: '#333',
-    backgroundColor: '#f9f9f9',
+    color: '#1F2937',
+    backgroundColor: '#FAFBFC',
+    fontWeight: '500',
+    ...Platform.select({
+      web: {
+        transition: 'all 0.2s ease',
+        ':focus': {
+          borderColor: '#6366F1',
+          backgroundColor: '#FFFFFF',
+        },
+      },
+    }),
   },
   notesInput: {
-    height: 100,
+    height: 120,
     textAlignVertical: 'top',
+    lineHeight: 24,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginTop: 20,
+    marginTop: 32,
+    gap: 16,
   },
   saveButton: {
-    backgroundColor: '#6BB9F0',
-    padding: 13,
-    borderRadius: 10,
-    flex: 1,
-    marginLeft: 10,
+    backgroundColor: '#6366F1',
+    padding: 18,
+    borderRadius: 16,
+    flex: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
     ...Platform.select({
       web: {
         cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
+        transition: 'all 0.2s ease',
         ':hover': {
-          backgroundColor: '#5ca3e0',
+          backgroundColor: '#4F46E5',
+          transform: 'translateY(-1px)',
         },
       },
     }),
   },
   cancelButton: {
-    backgroundColor: '#ccc',
-    padding: 13,
-    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    padding: 18,
+    borderRadius: 16,
     flex: 1,
-    marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
     ...Platform.select({
       web: {
         cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
+        transition: 'all 0.2s ease',
         ':hover': {
-          backgroundColor: '#bbb',
+          backgroundColor: '#E5E7EB',
+          borderColor: '#D1D5DB',
         },
       },
     }),
@@ -467,145 +933,192 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
+  },
+  cancelButtonText: {
+    color: '#6B7280',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    shadowOpacity: 0,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  saveButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  titleIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   dspSelectionContainer: {
     width: '100%',
-    marginBottom: 15,
-    alignItems: 'flex-start',
+    marginBottom: 24,
   },
   dspSelectionLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#374151',
+    marginBottom: 12,
+    fontWeight: '600',
   },
   dspSelectButton: {
     width: '100%',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#f9f9f9',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#FAFBFC',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     ...Platform.select({
       web: {
         cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
+        transition: 'all 0.2s ease',
         ':hover': {
-          backgroundColor: '#f1f1f1',
+          backgroundColor: '#F3F4F6',
+          borderColor: '#6366F1',
         },
       },
     }),
   },
   dspSelectButtonText: {
     fontSize: 16,
-    color: '#333',
+    color: '#374151',
     flex: 1,
+    fontWeight: '500',
   },
   assignedDspTextContainer: {
     width: '100%',
-    backgroundColor: '#e9f5f9',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#d0e0e8',
+    backgroundColor: '#EEF2FF',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#C7D2FE',
+    bottom: 35,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
   },
   assignedDspLabel: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#6BB9F0',
-    marginRight: 8,
+    fontWeight: '600',
+    color: '#6366F1',
+    marginRight: 12,
   },
   assignedDspName: {
     fontSize: 16,
-    color: '#333',
+    color: '#1F2937',
+    fontWeight: '500',
   },
   dspPickerOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   dspPickerModal: {
     backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
-    width: '85%',
-    maxWidth: Platform.OS === 'web' ? 400 : '85%',
-    maxHeight: '70%',
+    borderRadius: 24,
+    padding: 28,
+    width: '88%',
+    maxWidth: Platform.OS === 'web' ? 450 : '88%',
+    maxHeight: '75%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
   },
   dspPickerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#6BB9F0',
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 8,
+    color: '#2E3A59',
     textAlign: 'center',
   },
   dspSearchInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
     fontSize: 16,
-    color: '#333',
+    color: '#1F2937',
+    backgroundColor: '#FAFBFC',
+    fontWeight: '500',
   },
   dspList: {
     flexGrow: 1,
-    marginBottom: 15,
+    marginBottom: 20,
   },
   dspListItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#F3F4F6',
+    borderRadius: 12,
+    marginBottom: 4,
     ...Platform.select({
       web: {
         cursor: 'pointer',
+        transition: 'all 0.2s ease',
         ':hover': {
-          backgroundColor: '#f5f5f5',
+          backgroundColor: '#EEF2FF',
         },
       },
     }),
   },
   dspListItemName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
   },
   dspListItemAddress: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '400',
   },
   emptyDspListText: {
     textAlign: 'center',
-    color: '#999',
-    marginTop: 20,
+    color: '#9CA3AF',
+    marginTop: 40,
+    fontSize: 16,
+    fontWeight: '500',
   },
   dspPickerCloseButton: {
-    backgroundColor: '#FF9AA2',
-    padding: 12,
-    borderRadius: 10,
+    backgroundColor: '#6366F1',
+    padding: 16,
+    borderRadius: 16,
     alignItems: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
     ...Platform.select({
       web: {
         cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
+        transition: 'all 0.2s ease',
         ':hover': {
-          backgroundColor: '#e58a92',
+          backgroundColor: '#4F46E5',
         },
       },
     }),
@@ -613,7 +1126,7 @@ const styles = StyleSheet.create({
   dspPickerCloseButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });
 

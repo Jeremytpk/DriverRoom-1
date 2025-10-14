@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -31,6 +31,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useAuth } from '../../context/AuthContext';
 
 const Signup = ({ navigation }) => {
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
+
   // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

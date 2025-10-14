@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons'; // Keep Ionicons if used elsewhere
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -21,8 +21,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
 // Jey: Import your local image assets
-import profilePlaceholderIcon from '../assets/png/profile.png'; // For avatar placeholder
 import cameraIcon from '../assets/png/camera.png'; // For camera icon
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Centralized Color Palette (assuming it's consistent across your app)
 const Colors = {
@@ -41,6 +41,14 @@ const Colors = {
 const EditProfile = () => {
   const { userData, updateUserProfile } = useAuth();
   const navigation = useNavigation();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -173,16 +181,27 @@ const EditProfile = () => {
               <Image source={{ uri: profilePictureUrl }} style={styles.profilePicture} />
             ) : (
               <View style={[styles.profilePicture, styles.profilePicturePlaceholder]}>
-                {/* Jey: Replaced Ionicons with custom profile placeholder image */}
-                <Image source={profilePlaceholderIcon} style={styles.profilePlaceholderImage} />
+                <MaterialIcons name="person" size={60} color={Colors.white} />
               </View>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cameraIconContainer} onPress={handleImagePick}>
-              {/* Jey: Replaced Ionicons with custom camera icon */}
               <Image source={cameraIcon} style={styles.cameraImage} />
           </TouchableOpacity>
         </View>
+        {((profilePictureUrl && !newProfilePictureUri) || newProfilePictureUri) && (
+          <TouchableOpacity style={styles.deletePhotoButton} onPress={async () => {
+            setNewProfilePictureUri(null);
+            setProfilePictureUrl(null);
+            if (userData?.uid && profilePictureUrl && !newProfilePictureUri) {
+              const userDocRef = doc(db, 'users', userData.uid);
+              await updateDoc(userDocRef, { profilePictureUrl: null });
+              updateUserProfile({ ...userData, profilePictureUrl: null });
+            }
+          }}>
+            <Text style={styles.deletePhotoButtonText}>Remove Profile Photo</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.hintText}>Tap to change profile picture</Text>
 
@@ -327,13 +346,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Jey: Style for the profile placeholder image
-  profilePlaceholderImage: {
-    width: 80, // Adjust size as needed to fit well within the 120x120 container
-    height: 80, // Adjust size as needed
-    tintColor: Colors.white, // Apply tint if your PNG is a monochrome icon
-    resizeMode: 'contain', // Ensure the image fits without cropping
-  },
   cameraIconContainer: {
     position: 'absolute',
     bottom: -5,
@@ -347,7 +359,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: Colors.white,
   },
-  // Jey: Style for the camera image
   cameraImage: {
     width: 24, // Match Ionicons size
     height: 24, // Match Ionicons size
@@ -453,6 +464,20 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  deletePhotoButton: {
+    marginTop: 8,
+    marginBottom: 8,
+    alignSelf: 'center',
+    backgroundColor: Colors.redAccent,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+  },
+  deletePhotoButtonText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

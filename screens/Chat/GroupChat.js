@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, 
   TouchableOpacity, ActivityIndicator, Alert, 
   TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
@@ -25,6 +25,15 @@ const Colors = {
 
 const GroupChat = ({ navigation }) => {
   const { userData, currentUser } = useAuth();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
+
   const [groups, setGroups] = useState([]);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);

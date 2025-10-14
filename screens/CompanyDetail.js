@@ -272,7 +272,7 @@ const CompanyDetailScreen = ({ route, navigation }) => {
     <View style={companyDetailStyles.container}>
       <View style={companyDetailStyles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={28} color="#666" />
+          <Image source={require('../assets/png/arrow_rightShort.png')} style={{ width: 28, height: 28, resizeMode: 'contain', transform: [{ scaleX: -1 }], tintColor: '#000' }} />
         </TouchableOpacity>
         <Text style={companyDetailStyles.headerTitle}>Company Details</Text>
         <View style={{ width: 28 }} />

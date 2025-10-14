@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, FlatList, Image, SafeAreaView,
   Alert, ActivityIndicator, Modal, Dimensions, PanResponder, ScrollView
 } from 'react-native';
+import CustomHeader from '../../components/CustomHeader';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import {
   collection, doc, addDoc, serverTimestamp, onSnapshot,
@@ -27,6 +28,14 @@ const GroupConversation = ({ route }) => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const flatListRef = useRef(null);
   const navigation = useNavigation();
+
+  // Configure navigation header for iOS - hide back button title
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackTitle: Platform.OS === 'ios' ? '' : undefined,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation]);
 
   const [currentGroupName, setCurrentGroupName] = useState(route.params.groupName);
   const [currentGroupPhotoURL, setCurrentGroupPhotoURL] = useState(route.params.groupPhotoURL);
@@ -578,35 +587,7 @@ const GroupConversation = ({ route }) => {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Jey: Custom Header Implementation */}
-      <SafeAreaView style={styles.headerSafeArea}>
-        <View style={styles.headerContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
-            <Ionicons name="arrow-back" size={28} color="#333" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerCenter}
-            onPress={() => setIsGroupAdminModalVisible(true)}
-          >
-            <Text style={styles.groupNameHeader} numberOfLines={1}>
-              {currentGroupName}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerRight}
-            onPress={() => setIsGroupAdminModalVisible(true)}
-          >
-            {currentGroupPhotoURL ? (
-              <Image source={{ uri: currentGroupPhotoURL }} style={styles.groupPhoto} />
-            ) : (
-              <View style={styles.groupPhotoPlaceholder}>
-                <Ionicons name="people" size={24} color="#fff" />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <CustomHeader />
 
       {/* Jey: Pinned Notice Section */}
       {pinnedNotice && (
@@ -867,16 +848,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingTop: Platform.OS === 'android' ? 25 : 0,
   },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 60,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
+  // headerContainer: removed (in-component header removed)
   headerLeft: {
     position: 'absolute',
     left: 15,
