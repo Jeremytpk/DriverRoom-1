@@ -11,7 +11,8 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "newArch": true
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
         "buildType": "apk"
       },
       "ios": {
-        "distribution": "internal"
+        "distribution": "internal",
+        "newArch": true
       }
     },
     "production": {
@@ -29,13 +31,15 @@
         "buildType": "app-bundle"
       },
       "ios": {
-        "distribution": "store"
+        "distribution": "store",
+        "newArch": true
       }
     },
     "testflight": {
       "distribution": "internal",
       "ios": {
-        "distribution": "internal"
+        "distribution": "internal",
+        "newArch": true
       },
       "android": {
         "buildType": "apk"
