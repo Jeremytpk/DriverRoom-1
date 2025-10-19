@@ -26,10 +26,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.jeremytpk.DriverRoom",
-      "googleServicesFile": "./google-services.json",
-      "compileSdkVersion": 35,
-      "targetSdkVersion": 35,
-      "buildToolsVersion": "35.0.0"
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/logoOnly.png"
@@ -41,7 +38,7 @@
     },
     "plugins": [
       "@react-native-firebase/app",
-            [
+      [
         "expo-build-properties",
         {
           "ios": {
@@ -51,7 +48,8 @@
             "modularHeaders": true
           }
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Image, Modal, Pressable, TextInput } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useAuth } from '../../context/AuthContext';
+import AddGateCodeModal from '../../components/AddGateCodeModal';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,23 +10,34 @@ import { Ionicons } from '@expo/vector-icons';
 const GateCodes = () => {
   const [gateCodes, setGateCodes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false); // image viewer modal
   const [modalImage, setModalImage] = useState(null);
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [dsps, setDsps] = useState([]);
   const [search, setSearch] = useState('');
   const navigation = useNavigation();
+  const { userData } = useAuth();
+
+  // fetchGateCodes function so it can be reused after adding new code
+  const fetchGateCodes = async () => {
+    setLoading(true);
+    try {
+      const [codesSnap, companiesSnap] = await Promise.all([
+        getDocs(collection(db, 'gateCodes')),
+        getDocs(collection(db, 'companies')),
+      ]);
+      const codes = codesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const companies = companiesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setGateCodes(codes);
+      setDsps(companies);
+    } catch (error) {
+      console.error('Error fetching gate codes or dsps:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchGateCodes = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'gateCodes'));
-        const codes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setGateCodes(codes);
-      } catch (error) {
-        console.error('Error fetching gate codes:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchGateCodes();
   }, []);
 
@@ -128,20 +141,45 @@ const GateCodes = () => {
           </View>
         )}
       />
+      {/* Floating Add Button (always visible) */}
+      <TouchableOpacity
+        style={styles.fab}
+        accessibilityLabel="Add gate code"
+        onPress={() => setAddModalVisible(true)}
+      >
+        <Ionicons name="add" size={28} color="white" />
+      </TouchableOpacity>
       <Modal
         visible={modalVisible}
         transparent
         animationType="fade"
         onRequestClose={closeImageModal}
       >
-        <Pressable style={styles.modalOverlay} onPress={closeImageModal}>
+        <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
           <View style={styles.modalContent}>
+            {/* Use AddGateCodeModal component instead of raw image modal */}
+            {/* We'll lazy-load the component to avoid circular imports at top */}
+            {/* existing image modal retained for image preview within list */}
             {modalImage && (
               <Image source={{ uri: modalImage }} style={styles.modalImage} />
             )}
           </View>
         </Pressable>
       </Modal>
+      {/* Add Gate Code Modal component loaded at bottom to avoid layout overlap */}
+      <AddGateCodeModal
+        visible={addModalVisible}
+        onClose={() => setAddModalVisible(false)}
+        onSave={() => {
+          // refresh list after saving
+          setAddModalVisible(false);
+          fetchGateCodes();
+        }}
+        currentDspName={userData?.dspName}
+        userDspId={userData?.companyId || userData?.dspUserId || userData?.uid}
+        dsps={dsps}
+        isAdmin={!!userData?.isAdmin}
+      />
     </View>
   );
 };
@@ -277,6 +315,23 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     paddingVertical: 0,
     backgroundColor: 'transparent',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2E8B57',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 100,
   },
 });
 

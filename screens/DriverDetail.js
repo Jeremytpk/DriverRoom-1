@@ -119,13 +119,14 @@ const DriverDetailScreen = ({ route, navigation }) => {
 
   return (
     <ScrollView contentContainerStyle={driverStyles.container}>
-      <View style={driverStyles.header}>
+      {/* <View style={driverStyles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={28} color="#666" />
         </TouchableOpacity>
         <Text style={driverStyles.headerTitle}>Driver Details</Text>
         <View style={{ width: 28 }} />
       </View>
+      */}
 
       <View style={driverStyles.profileCard}>
         {driver.photoURL ? (
